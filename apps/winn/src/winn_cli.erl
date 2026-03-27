@@ -124,9 +124,10 @@ scaffold(AppName) ->
     end.
 
 starter_winn(AppName) ->
+    ModName = to_pascal_case(AppName),
     io_lib:format(
-        "module ~s\n\n  def main() IO.puts(\"Hello from ~s!\") end\n\nend\n",
-        [AppName, AppName]
+        "module ~s\n  def main()\n    IO.puts(\"Hello from ~s!\")\n  end\nend\n",
+        [ModName, AppName]
     ).
 
 starter_rebar(AppName) ->
@@ -157,6 +158,16 @@ cleanup_dir(Dir) ->
     Beams = filelib:wildcard(Dir ++ "/*.beam"),
     [file:delete(B) || B <- Beams],
     file:del_dir(Dir).
+
+%% Convert snake_case or lowercase name to PascalCase.
+%% "hello_world" -> "HelloWorld", "my_app" -> "MyApp", "hello" -> "Hello"
+to_pascal_case(Name) ->
+    Parts = string:split(Name, "_", all),
+    lists:flatten([capitalize(P) || P <- Parts]).
+
+capitalize([]) -> [];
+capitalize([C | Rest]) when C >= $a, C =< $z -> [C - 32 | Rest];
+capitalize(S) -> S.
 
 is_tty() ->
     case io:columns() of
