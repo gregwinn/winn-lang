@@ -32,6 +32,7 @@ Nonterminals
     match_expr match_clauses match_clause_body match_clause
     if_expr switch_expr switch_clauses switch_clause
     try_expr rescue_clauses rescue_clause_list rescue_clause
+    fn_expr for_expr
     schema_def field_list field_item.
 
 %% Phase 1 terminals + Phase 2 additions.
@@ -39,10 +40,11 @@ Terminals
     'module' 'def' 'do' 'end' 'use' 'schema' 'field'
     'match' 'ok_kw' 'err_kw' 'nil_kw'
     'if' 'else' 'switch' 'when' 'try' 'rescue'
+    'fn' 'for' 'in'
     'and' 'or' 'not'
     ident module_name
-    atom_lit integer_lit float_lit string_lit boolean_lit
-    '|>' '=>'
+    atom_lit integer_lit float_lit string_lit interp_string boolean_lit
+    '|>' '=>' '..'
     '<>'
     '==' '!='
     '<=' '>='
@@ -131,6 +133,7 @@ add_expr -> mul_expr                       : '$1'.
 add_expr -> add_expr '+' mul_expr   : {op, line('$2'), '+',  '$1', '$3'}.
 add_expr -> add_expr '-' mul_expr   : {op, line('$2'), '-',  '$1', '$3'}.
 add_expr -> add_expr '<>' mul_expr  : {op, line('$2'), '<>', '$1', '$3'}.
+add_expr -> add_expr '..' mul_expr : {range, line('$2'), '$1', '$3'}.
 
 mul_expr -> unary_expr                     : '$1'.
 mul_expr -> mul_expr '*' unary_expr : {op, line('$2'), '*', '$1', '$3'}.
@@ -145,16 +148,23 @@ unary_expr -> '-' unary_expr
 primary_expr -> call_expr                  : '$1'.
 primary_expr -> block_call                 : '$1'.
 primary_expr -> ident                      : {var, line('$1'), val('$1')}.
+primary_expr -> ident '.' ident            : {field_access, line('$2'), {var, line('$1'), val('$1')}, val('$3')}.
 primary_expr -> literal                    : '$1'.
 primary_expr -> '(' expr ')'               : '$2'.
 primary_expr -> match_expr                 : '$1'.
 primary_expr -> if_expr                    : '$1'.
 primary_expr -> switch_expr                : '$1'.
 primary_expr -> try_expr                   : '$1'.
+primary_expr -> fn_expr                    : '$1'.
+primary_expr -> for_expr                   : '$1'.
 
 %% Assignment: x = expr (parsed at statement level via primary_expr)
 primary_expr -> ident '=' expr
     : {assign, line('$2'), {var, line('$1'), val('$1')}, '$3'}.
+
+%% Pattern assignment: {:ok, x} = expr
+primary_expr -> '{' arg_list '}' '=' expr
+    : {pat_assign, line('$4'), {tuple, line('$1'), '$2'}, '$5'}.
 
 %% ── Match expression ───────────────────────────────────────────────────────
 %%
@@ -221,6 +231,7 @@ args -> expr ',' args   : ['$1' | '$3'].
 literal -> integer_lit  : {integer, line('$1'), val('$1')}.
 literal -> float_lit    : {float,   line('$1'), val('$1')}.
 literal -> string_lit   : {string,  line('$1'), val('$1')}.
+literal -> interp_string : {interp_string, line('$1'), val('$1')}.
 literal -> atom_lit     : {atom,    line('$1'), val('$1')}.
 literal -> boolean_lit  : {boolean, line('$1'), val('$1')}.
 literal -> 'nil_kw'     : {nil,     line('$1')}.
@@ -303,8 +314,12 @@ switch_clauses -> switch_clause switch_clauses
 
 switch_clause -> pattern '=>' expr
     : {switch_clause, line('$2'), '$1', none, ['$3']}.
+switch_clause -> pattern '=>' 'do' expr_seq 'end'
+    : {switch_clause, line('$2'), '$1', none, '$4'}.
 switch_clause -> pattern 'when' expr '=>' expr
     : {switch_clause, line('$1'), '$1', '$3', ['$5']}.
+switch_clause -> pattern 'when' expr '=>' 'do' expr_seq 'end'
+    : {switch_clause, line('$1'), '$1', '$3', '$6'}.
 
 %% ── Try/rescue expression ───────────────────────────────────────────────
 
@@ -321,8 +336,23 @@ rescue_clause_list -> rescue_clause
 rescue_clause_list -> rescue_clause rescue_clause_list
     : ['$1' | '$2'].
 
+rescue_clause -> pattern '=>' 'do' expr_seq 'end'
+    : {rescue_clause, line('$2'), '$1', '$4'}.
 rescue_clause -> pattern '=>' expr
     : {rescue_clause, line('$2'), '$1', ['$3']}.
+
+%% ── Anonymous function (lambda) ───────────────────────────────────────────
+%%   fn(x, y) => x + y end
+%%   fn() => 42 end
+
+fn_expr -> 'fn' '(' param_list ')' '=>' expr_seq 'end'
+    : {block, line('$1'), '$3', '$6'}.
+
+%% ── For comprehension ────────────────────────────────────────────────────
+%%   for x in list do body end
+
+for_expr -> 'for' ident 'in' expr 'do' expr_seq 'end'
+    : {for_expr, line('$1'), val('$2'), '$4', '$6'}.
 
 %% ── Schema definition ─────────────────────────────────────────────────────
 

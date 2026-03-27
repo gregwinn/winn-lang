@@ -2,7 +2,7 @@
     {description, "The Winn programming language compiler"},
     {vsn, "0.1.0"},
     {registered, []},
-    {applications, [kernel, stdlib, compiler]},
+    {applications, [kernel, stdlib, compiler, cowboy, jsone]},
     {env, []},
     {modules, []}
 ]}.

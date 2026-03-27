@@ -1,0 +1,18 @@
+module Fibonacci
+  def fib(0)
+    0
+  end
+
+  def fib(1)
+    1
+  end
+
+  def fib(n) when n > 1
+    fib(n - 1) + fib(n - 2)
+  end
+
+  def main()
+    result = fib(10)
+    IO.puts("fib(10) = " <> to_string(result))
+  end
+end

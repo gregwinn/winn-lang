@@ -1,0 +1,32 @@
+module Post
+  use Winn.Schema
+
+  schema "posts" do
+    field :title,     :string
+    field :body,      :text
+    field :published, :boolean
+    field :author_id, :integer
+  end
+end
+
+module Blog
+  def create_post(params)
+    data      = Post.new(%{})
+    changeset = Changeset.new(data, params)
+    changeset = Changeset.validate_required(changeset, [:title, :body])
+
+    if Changeset.valid(changeset)
+      Repo.insert(Post, Changeset.apply_changes(changeset))
+    else
+      {:error, Changeset.errors(changeset)}
+    end
+  end
+
+  def list_posts()
+    Repo.all(Post)
+  end
+
+  def get_post(id)
+    Repo.get(Post, id)
+  end
+end

@@ -1,0 +1,45 @@
+module WebService
+  # Authenticate a request by verifying a JWT token
+  def authenticate(token)
+    secret = System.get_env("JWT_SECRET", "dev_secret")
+    match JWT.verify(token, secret)
+      ok claims => {:ok, claims}
+      err :expired => {:error, :token_expired}
+      err _ => {:error, :unauthorized}
+    end
+  end
+
+  # Issue a new JWT for a user
+  def issue_token(user_id)
+    secret = System.get_env("JWT_SECRET", "dev_secret")
+    exp = DateTime.now() + 86400
+    JWT.sign(%{user_id: user_id, exp: exp}, secret)
+  end
+
+  # Fetch data from an external API
+  def fetch_user(id)
+    url = "https://jsonplaceholder.typicode.com/users/" <> to_string(id)
+    try
+      match HTTP.get(url)
+        ok resp =>
+          if resp.status == 200
+            {:ok, resp.body}
+          else
+            {:error, resp.status}
+          end
+        err reason => {:error, reason}
+      end
+    rescue
+      _ => {:error, :network_failure}
+    end
+  end
+
+  # Notify multiple users concurrently
+  def notify_users(user_ids, message)
+    Logger.info("sending notifications", %{count: List.length(user_ids)})
+    Task.async_all(user_ids) do |id|
+      Logger.debug("notifying user", %{user_id: id})
+      {:ok, id}
+    end
+  end
+end

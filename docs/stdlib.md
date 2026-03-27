@@ -174,6 +174,145 @@ Return a new map with the key removed.
 
 ---
 
+## System
+
+### `System.get_env(key)`
+Read an environment variable. Returns the value as a string, or `nil` if not set.
+```winn
+port = System.get_env("PORT")
+# => "4000" or nil
+```
+
+### `System.get_env(key, default)`
+Read with a default value.
+```winn
+port = System.get_env("PORT", "3000")
+```
+
+### `System.put_env(key, value)`
+Set an environment variable.
+```winn
+System.put_env("DEBUG", "true")
+```
+
+---
+
+## UUID
+
+### `UUID.v4()`
+Generate a random UUID v4 string.
+```winn
+id = UUID.v4()
+# => "550e8400-e29b-41d4-a716-446655440000"
+```
+
+---
+
+## DateTime
+
+### `DateTime.now()`
+Returns the current Unix timestamp in seconds.
+```winn
+now = DateTime.now()
+# => 1711540800
+```
+
+### `DateTime.to_iso8601(timestamp)`
+Convert a Unix timestamp to an ISO 8601 string.
+```winn
+DateTime.to_iso8601(1704067200)
+# => "2024-01-01T00:00:00Z"
+```
+
+### `DateTime.from_iso8601(string)`
+Parse an ISO 8601 string to a Unix timestamp.
+```winn
+{:ok, ts} = DateTime.from_iso8601("2024-01-01T00:00:00Z")
+# ts => 1704067200
+```
+
+### `DateTime.diff(t1, t2)`
+Returns the difference in seconds between two timestamps.
+```winn
+diff = DateTime.diff(later, earlier)
+# => 3600  (1 hour)
+```
+
+### `DateTime.format(timestamp, format_string)`
+Format a timestamp using strftime-style directives (`%Y`, `%m`, `%d`, `%H`, `%M`, `%S`).
+```winn
+DateTime.format(ts, "%Y-%m-%d")
+# => "2024-01-01"
+
+DateTime.format(ts, "%Y-%m-%d %H:%M:%S")
+# => "2024-01-01 00:00:00"
+```
+
+---
+
+## Logger
+
+Structured JSON logging to stderr. Each log line includes a timestamp, level, message, and optional metadata.
+
+### `Logger.info(message)` / `Logger.info(message, metadata)`
+```winn
+Logger.info("user created")
+Logger.info("user created", %{user_id: 42})
+```
+
+Output:
+```json
+{"level":"info","msg":"user created","user_id":42,"ts":"2026-03-27T12:00:00Z"}
+```
+
+### `Logger.warn(message)` / `Logger.warn(message, metadata)`
+```winn
+Logger.warn("slow query", %{duration_ms: 450})
+```
+
+### `Logger.error(message)` / `Logger.error(message, metadata)`
+```winn
+Logger.error("db connection failed", %{reason: "timeout"})
+```
+
+### `Logger.debug(message)` / `Logger.debug(message, metadata)`
+```winn
+Logger.debug("checkpoint", %{step: 3})
+```
+
+---
+
+## Crypto
+
+### `Crypto.hash(algorithm, data)`
+Hash data with the given algorithm. Returns a hex-encoded binary.
+Supported algorithms: `:sha256`, `:sha384`, `:sha512`, `:sha`, `:md5`.
+```winn
+hash = Crypto.hash(:sha256, "hello")
+# => "2cf24dba5fb0a30e26e83b2ac5b9e29e..."
+```
+
+### `Crypto.hmac(algorithm, key, data)`
+Compute an HMAC. Returns a hex-encoded binary.
+```winn
+hmac = Crypto.hmac(:sha256, "secret", "data")
+```
+
+### `Crypto.random_bytes(n)`
+Generate `n` cryptographically secure random bytes.
+```winn
+token = Crypto.random_bytes(32)
+```
+
+### `Crypto.base64_encode(binary)` / `Crypto.base64_decode(string)`
+Base64 encode and decode.
+```winn
+encoded = Crypto.base64_encode(token)
+decoded = Crypto.base64_decode(encoded)
+```
+
+---
+
 ## Type Conversions
 
 These are global functions (no module prefix needed from Erlang; in Winn call via the runtime):

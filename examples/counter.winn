@@ -1,0 +1,27 @@
+module Counter
+  use Winn.GenServer
+
+  def init(initial)
+    {:ok, initial}
+  end
+
+  def handle_call(:get, _from, state)
+    {:reply, state, state}
+  end
+
+  def handle_cast({:inc, n}, state)
+    {:noreply, state + n}
+  end
+
+  def handle_cast(:reset, _state)
+    {:noreply, 0}
+  end
+
+  def handle_info(_msg, state)
+    {:noreply, state}
+  end
+
+  def terminate(_reason, _state)
+    :ok
+  end
+end

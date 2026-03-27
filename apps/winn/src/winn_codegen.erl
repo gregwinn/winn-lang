@@ -53,6 +53,20 @@ gen_body([Single]) ->
 gen_body([{assign, _Line, {var, _, VName}, Expr} | Rest]) ->
     Var = cerl:c_var(var_atom(VName)),
     cerl:c_let([Var], gen_expr(Expr), gen_body(Rest));
+gen_body([{pat_assign_case, _Line, Pat, CaseExpr} | Rest]) ->
+    %% Pattern assignment: bind the matched value, then continue with
+    %% the pattern variables in scope via the case clause.
+    %% We generate: case Expr of Pat -> <rest of body> end
+    {case_expr, _, Scrutinee, [{case_clause, CLine, Pats, Guard, _Body}]} = CaseExpr,
+    CerlScrutinee = gen_expr(Scrutinee),
+    CerlPats = [gen_pattern(P) || P <- Pats],
+    CerlGuard = case Guard of
+        none -> cerl:c_atom(true);
+        _    -> gen_expr(Guard)
+    end,
+    CerlBody = gen_body(Rest),
+    Clause = cerl:c_clause(CerlPats, CerlGuard, CerlBody),
+    cerl:c_case(CerlScrutinee, [Clause]);
 gen_body([First | Rest]) ->
     cerl:c_seq(gen_expr(First), gen_body(Rest)).
 
@@ -64,7 +78,13 @@ gen_expr({case_expr, _Line, Scrutinee, Clauses}) ->
     CerlClauses   = [gen_case_clause(C) || C <- Clauses],
     cerl:c_case(CerlScrutinee, CerlClauses);
 
-%% Local call
+%% Local call — check for built-in runtime functions first.
+gen_expr({call, _Line, Fun, Args}) when
+        Fun =:= to_string; Fun =:= to_integer;
+        Fun =:= to_float;  Fun =:= to_atom;
+        Fun =:= inspect ->
+    CArgs = [gen_expr(A) || A <- Args],
+    cerl:c_call(cerl:c_atom(winn_runtime), cerl:c_atom(Fun), CArgs);
 gen_expr({call, _Line, Fun, Args}) ->
     Op    = cerl:c_var({fn_atom(Fun), length(Args)}),
     CArgs = [gen_expr(A) || A <- Args],
@@ -155,6 +175,16 @@ gen_expr({try_expr, _Line, Body, RescueClauses}) ->
                cerl:c_let([CatchVar],
                           cerl:c_tuple([ExcClass, ExcVal, ExcTrace]),
                           CatchCase));
+
+%% Range: 1..10 => lists:seq(1, 10)
+gen_expr({range, _Line, From, To}) ->
+    cerl:c_call(cerl:c_atom(lists), cerl:c_atom(seq),
+                [gen_expr(From), gen_expr(To)]);
+
+%% Map field access: user.name => maps:get(name, User)
+gen_expr({field_access, _Line, Expr, Field}) ->
+    cerl:c_call(cerl:c_atom(maps), cerl:c_atom(get),
+                [cerl:c_atom(Field), gen_expr(Expr)]);
 
 gen_expr(Unknown) ->
     error({unsupported_ast_node, Unknown}).
@@ -255,6 +285,22 @@ resolve_dot_call('GenServer', Fun) -> {gen_server, Fun};
 resolve_dot_call('Supervisor', Fun) -> {supervisor, Fun};
 resolve_dot_call('Repo', Fun)       -> {winn_repo, Fun};
 resolve_dot_call('Changeset', Fun)  -> {winn_changeset, Fun};
+resolve_dot_call('System', Fun) ->
+    {winn_runtime, list_to_atom("system." ++ atom_to_list(Fun))};
+resolve_dot_call('UUID', Fun) ->
+    {winn_runtime, list_to_atom("uuid." ++ atom_to_list(Fun))};
+resolve_dot_call('DateTime', Fun) ->
+    {winn_runtime, list_to_atom("datetime." ++ atom_to_list(Fun))};
+resolve_dot_call('Logger', Fun)  -> {winn_logger, Fun};
+resolve_dot_call('Crypto', Fun)  -> {winn_crypto, Fun};
+resolve_dot_call('HTTP', Fun)    -> {winn_http, Fun};
+resolve_dot_call('Config', Fun)  -> {winn_config, Fun};
+resolve_dot_call('Task', Fun)    -> {winn_task, Fun};
+resolve_dot_call('JWT', Fun)     -> {winn_jwt, Fun};
+resolve_dot_call('WS', Fun)      -> {winn_ws, Fun};
+resolve_dot_call('Server', Fun)  -> {winn_server, Fun};
+resolve_dot_call('JSON', Fun)    -> {winn_json, Fun};
+resolve_dot_call('Winn', Fun)    -> {winn_runtime, Fun};
 resolve_dot_call(Mod, Fun) ->
     ErlMod = list_to_atom(string:lowercase(atom_to_list(Mod))),
     {ErlMod, Fun}.

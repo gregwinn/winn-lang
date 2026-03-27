@@ -118,6 +118,46 @@ end
 
 ---
 
+## Application
+
+Define an OTP application entry point with `use Winn.Application`:
+
+```winn
+module MyApp
+  use Winn.Application
+
+  def start(_type, _args)
+    children = [
+      {Counter, [0]},
+      {MyApp.Repo, []}
+    ]
+    Supervisor.start_link(children, %{strategy: :one_for_one})
+  end
+end
+```
+
+`use Winn.Application` adds `-behaviour(application)` to the compiled module.
+
+---
+
+## Task (use Winn.Task)
+
+Define CLI-runnable task modules with `use Winn.Task`:
+
+```winn
+module Tasks.Db.Migrate
+  use Winn.Task
+
+  def run(args)
+    IO.puts("Running migrations...")
+  end
+end
+```
+
+`use Winn.Task` adds `-behaviour(winn_task)` to the compiled module.
+
+---
+
 ## Calling OTP Functions
 
 Use `GenServer` and `Supervisor` module calls from Winn:

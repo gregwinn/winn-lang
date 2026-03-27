@@ -31,7 +31,9 @@ compile_file(Path, OutDir) ->
             Source = binary_to_list(Binary),
             compile_string(Source, Path, OutDir);
         {error, Reason} ->
-            format_error({file_read, Path, Reason})
+            Err = {error, {file_read, Path, Reason}},
+            print_error(Err, "", Path),
+            Err
     end.
 
 %% Compile a source string (FileName used for error messages).
@@ -41,10 +43,9 @@ compile_string(Source, FileName) ->
 compile_string(Source, FileName, OutDir) ->
     case run_pipeline(Source, FileName, OutDir) of
         {ok, BeamFiles} ->
-            io:format("Compiled ~s → ~s~n",
-                      [FileName, lists:join(", ", BeamFiles)]),
             {ok, BeamFiles};
         {error, _} = Err ->
+            print_error(Err, Source, FileName),
             Err
     end.
 
@@ -54,10 +55,10 @@ run_pipeline(Source, FileName, OutDir) ->
     with([
         fun() -> lex(Source, FileName) end,
         fun(Tokens)  -> parse(Tokens, FileName) end,
-        fun(Forms)   -> semantic(Forms) end,
-        fun(Forms)   -> transform(Forms) end,
-        fun(Forms)   -> codegen(Forms) end,
-        fun(CoreMods) -> emit(CoreMods, OutDir) end
+        fun(Forms)   -> semantic(Forms, Source, FileName) end,
+        fun(Forms)   -> transform(Forms, FileName) end,
+        fun(Forms)   -> codegen(Forms, FileName) end,
+        fun(CoreMods) -> emit(CoreMods, OutDir, FileName) end
     ]).
 
 %% ── Pipeline stages ───────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ lex(Source, FileName) ->
         {ok, Tokens, _EndLine} ->
             {ok, Tokens};
         {error, {Line, winn_lexer, Error}, _} ->
-            format_error({lex_error, FileName, Line, winn_lexer:format_error(Error)})
+            {error, {lex_error, FileName, Line, winn_lexer:format_error(Error)}}
     end.
 
 parse(Tokens, FileName) ->
@@ -75,31 +76,65 @@ parse(Tokens, FileName) ->
         {ok, Forms} ->
             {ok, Forms};
         {error, {Line, winn_parser, Msg}} ->
-            format_error({parse_error, FileName, Line, Msg})
+            {error, {parse_error, FileName, Line, Msg}}
     end.
 
-semantic(Forms) ->
+semantic(Forms, Source, FileName) ->
     case winn_semantic:analyse(Forms) of
         {ok, Analysed} ->
             {ok, Analysed};
         {error, Errors} ->
-            %% Print warnings/errors but continue if only warnings.
             Fatals = [E || E <- Errors, element(1, E) =:= error],
-            [print_diagnostic(E) || E <- Errors],
+            %% Print all diagnostics with nice formatting.
+            Formatted = winn_errors:format_diagnostics(Errors, Source, FileName),
+            io:put_chars(standard_error, Formatted),
             case Fatals of
                 [] -> {ok, Forms};
-                _  -> {error, Errors}
+                _  -> {error, {semantic_errors, Errors}}
             end
     end.
 
-transform(Forms) ->
-    {ok, winn_transform:transform(Forms)}.
+transform(Forms, FileName) ->
+    try
+        {ok, winn_transform:transform(Forms)}
+    catch
+        error:{unsupported_pipe_block_target, Line} ->
+            {error, {transform_error, FileName, Line,
+                     <<"Unsupported Pipe Target">>,
+                     <<"The right side of |> must be a function call.">>}};
+        error:{unsupported_block_call_target, Line} ->
+            {error, {transform_error, FileName, Line,
+                     <<"Unsupported Block Target">>,
+                     <<"A do...end block must follow a function call.">>}};
+        error:Reason ->
+            Line = extract_line(Reason),
+            {error, {transform_error, FileName, Line,
+                     <<"Transform Error">>,
+                     iolist_to_binary(io_lib:format("~p", [Reason]))}}
+    end.
 
-codegen(Forms) ->
-    CoreMods = winn_codegen:gen(Forms),
-    {ok, CoreMods}.
+codegen(Forms, FileName) ->
+    try
+        {ok, winn_codegen:gen(Forms)}
+    catch
+        error:{unsupported_ast_node, Node} ->
+            Line = extract_line(Node),
+            {error, {codegen_error, FileName, Line,
+                     <<"Unsupported Expression">>,
+                     <<"The compiler cannot translate this expression.">>}};
+        error:{unsupported_pattern_node, Node} ->
+            Line = extract_line(Node),
+            {error, {codegen_error, FileName, Line,
+                     <<"Unsupported Pattern">>,
+                     <<"This pattern syntax is not supported.">>}};
+        error:Reason ->
+            Line = extract_line(Reason),
+            {error, {codegen_error, FileName, Line,
+                     <<"Code Generation Error">>,
+                     iolist_to_binary(io_lib:format("~p", [Reason]))}}
+    end.
 
-emit(CoreMods, OutDir) ->
+emit(CoreMods, OutDir, FileName) ->
     Results = [winn_core_emit:emit(Mod, OutDir) || Mod <- CoreMods],
     Errors  = [E || {error, E} <- Results],
     case Errors of
@@ -107,12 +142,11 @@ emit(CoreMods, OutDir) ->
             BeamFiles = [F || {ok, F} <- Results],
             {ok, BeamFiles};
         _ ->
-            format_error({emit_errors, Errors})
+            {error, {compile_failed, Errors}}
     end.
 
-%% ── Helpers ───────────────────────────────────────────────────────────────
+%% ── Helpers ─────────────────────────────────────────────────────────────
 
-%% Chain a list of fun() | fun(Acc) steps, threading the result.
 with([F | Rest]) ->
     case F() of
         {ok, Value} -> with(Rest, Value);
@@ -127,12 +161,15 @@ with([F | Rest], Value) ->
         {error, _} = Err -> Err
     end.
 
-format_error(Reason) ->
-    {error, Reason}.
+print_error({error, Reason}, Source, FileName) ->
+    Formatted = winn_errors:format(Reason, Source, FileName),
+    io:put_chars(standard_error, Formatted);
+print_error(_, _, _) ->
+    ok.
 
-print_diagnostic({warning, Line, Name, Msg}) ->
-    io:format("warning: line ~p (~p): ~s~n", [Line, Name, Msg]);
-print_diagnostic({error, Line, Name, Msg}) ->
-    io:format("error: line ~p (~p): ~s~n", [Line, Name, Msg]);
-print_diagnostic(Other) ->
-    io:format("diagnostic: ~p~n", [Other]).
+extract_line(Term) when is_tuple(Term), tuple_size(Term) >= 2 ->
+    case element(2, Term) of
+        L when is_integer(L) -> L;
+        _ -> none
+    end;
+extract_line(_) -> none.
