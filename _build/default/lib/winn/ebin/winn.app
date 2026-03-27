@@ -5,7 +5,8 @@
               {applications,[kernel,stdlib,compiler,cowboy,jsone]},
               {env,[]},
               {modules,[winn,winn_ast,winn_changeset,winn_cli,winn_codegen,
-                        winn_config,winn_core_emit,winn_crypto,winn_http,
-                        winn_json,winn_jwt,winn_lexer,winn_logger,winn_parser,
-                        winn_repo,winn_router,winn_runtime,winn_semantic,
-                        winn_server,winn_task,winn_transform,winn_ws]}]}.
+                        winn_config,winn_core_emit,winn_crypto,winn_errors,
+                        winn_http,winn_json,winn_jwt,winn_lexer,winn_logger,
+                        winn_parser,winn_repo,winn_router,winn_runtime,
+                        winn_semantic,winn_server,winn_task,winn_transform,
+                        winn_ws]}]}.
