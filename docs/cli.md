@@ -42,21 +42,14 @@ my_app/
     └── my_app.winn    # Starter module with main()
 ```
 
-The generated `src/my_app.winn`:
+The generated `src/my_app.winn` (note: project names are auto-converted to PascalCase module names):
 
 ```winn
 module MyApp
   def main()
-    IO.puts("Hello from MyApp!")
+    IO.puts("Hello from my_app!")
   end
 end
-```
-
-The generated `rebar.config`:
-
-```erlang
-{erl_opts, [debug_info]}.
-{deps, []}.
 ```
 
 ---
@@ -69,24 +62,25 @@ Compile `.winn` files to `.beam` bytecode.
 # Compile a single file — output to ebin/
 winn compile src/my_app.winn
 
-# Compile all .winn files in the current directory
+# Compile all .winn files in src/ (falls back to current dir)
 winn compile
+# => Compiled 3 file(s) to ebin/
 ```
 
-Output `.beam` files are written to `ebin/`. The directory is created automatically if it doesn't exist.
+Output `.beam` files are written to `ebin/`. The directory is created automatically.
 
-**What happens during compilation:**
+**Compilation pipeline:**
 
 1. Lexer tokenizes the source (`.winn` → tokens)
 2. Parser builds the AST (tokens → syntax tree)
 3. Semantic analysis checks scope and variables
-4. Transform desugars pipes, match blocks, closures, schemas
+4. Transform desugars pipes, match blocks, closures, interpolation, schemas
 5. Codegen produces Core Erlang via the `cerl` module
 6. Core Erlang is compiled to `.beam` bytecode
 
 **Error output:**
 
-If compilation fails, you get a structured error message pointing to the issue:
+If compilation fails, you get a clear error message pointing to the issue:
 
 ```
 -- Syntax Error ----------------------------- src/app.winn --
@@ -99,13 +93,13 @@ If compilation fails, you get a structured error message pointing to the issue:
   Hint: Did you close a block too early, or forget an expression?
 ```
 
-Errors are printed to stderr. The exit code is 1 on failure, 0 on success.
+Errors are printed to stderr. Exit code is 1 on failure, 0 on success.
 
 ---
 
 ### `winn run <file>`
 
-Compile a `.winn` file and immediately run it by calling `Module:main()`.
+Compile a single `.winn` file and immediately run it.
 
 ```sh
 winn run src/hello.winn
@@ -114,11 +108,54 @@ winn run src/hello.winn
 How it works:
 
 1. Compiles the file to a temporary directory
-2. Loads the `.beam` into the running Erlang VM
-3. Calls `module_name:main()` (falls back to `main/1` with `[]`)
-4. Cleans up the temp directory
+2. Reads the module name from the source (`module HelloWorld` → `helloworld`)
+3. Loads the `.beam` into the Erlang VM
+4. Calls `Module:main()` (falls back to `main/1` with `[]`)
+5. Cleans up the temp directory
 
-The module name is derived from the filename: `hello.winn` → calls `hello:main()`.
+Best for quick scripts and single-file programs.
+
+---
+
+### `winn start [module]`
+
+Compile a full project and start it with the VM kept alive.
+
+```sh
+# Auto-detect main module from first .winn file
+winn start
+
+# Specify a module explicitly
+winn start my_app
+```
+
+How it works:
+
+1. Compiles all `.winn` files in `src/` (or current directory)
+2. Adds `ebin/` and `_build/` dependency paths to the code path
+3. Starts OTP applications (crypto, ssl, cowboy, hackney, gun)
+4. Calls `Module:main()` on the detected or specified module
+5. **Keeps the VM running** after `main()` returns
+
+Use `winn start` for:
+- HTTP servers (the VM must stay alive to serve requests)
+- GenServer / Supervisor applications
+- Any long-running service
+
+---
+
+### `winn version`
+
+Print the version.
+
+```sh
+winn version
+# => winn 0.2.0
+
+# Also works with flags:
+winn -v
+winn --version
+```
 
 ---
 
@@ -132,46 +169,36 @@ winn help
 
 ---
 
-## Running Compiled Modules
+## Typical Workflows
 
-After compiling with `winn compile`, run your BEAM files with Erlang directly:
+### Quick script
 
 ```sh
-# Simple — just your compiled code
-erl -pa ebin -noshell -eval 'my_app:main(), halt().'
-
-# With dependencies (HTTP server, etc.)
-erl -pa ebin -pa _build/default/lib/*/ebin -noshell -eval 'my_app:main().'
+winn run hello.winn
 ```
 
----
-
-## Typical Workflow
+### Web service
 
 ```sh
-# 1. Create a new project
-winn new my_app
-cd my_app
+winn new my_api
+cd my_api
+# Edit src/*.winn files
+winn start
+# Server is running, hit it with curl
+```
 
-# 2. Edit your source files
-#    (use VS Code with the Winn extension for syntax highlighting)
+### Multi-file project
 
-# 3. Compile
-winn compile src/my_app.winn
-
-# 4. Run
-winn run src/my_app.winn
-
-# Or compile all and run with Erlang
-winn compile
-erl -pa ebin -noshell -eval 'my_app:main(), halt().'
+```sh
+winn compile              # Compile all src/*.winn to ebin/
+winn start                # Start with deps loaded
 ```
 
 ---
 
 ## Programmatic API
 
-You can also drive the Winn compiler from Erlang code or the rebar3 shell:
+Drive the Winn compiler from Erlang code or the rebar3 shell:
 
 ```erlang
 %% Compile a file to a directory

@@ -130,6 +130,49 @@ Read a request header (lowercase name). Returns `nil` if not present.
 auth = Server.header(conn, "authorization")
 ```
 
+#### `Server.set_header(conn, name, value)`
+
+Set a response header. Applied when the response is sent.
+
+```winn
+conn = Server.set_header(conn, "x-request-id", UUID.v4())
+```
+
+### Middleware
+
+Define middleware functions that run before every handler. Export `middleware/0` from your router:
+
+```winn
+module Api
+  use Winn.Router
+
+  def middleware()
+    [:cors, :authenticate, :log_request]
+  end
+
+  def cors(conn, next)
+    conn = Server.set_header(conn, "access-control-allow-origin", "*")
+    next(conn)
+  end
+
+  def authenticate(conn, next)
+    match Server.header(conn, "authorization")
+      nil => Server.json(conn, %{error: "unauthorized"}, 401)
+      _token => next(conn)
+    end
+  end
+
+  def log_request(conn, next)
+    Logger.info("#{Server.method(conn)} #{Server.path(conn)}")
+    next(conn)
+  end
+end
+```
+
+Each middleware takes `(conn, next)`. Call `next(conn)` to continue to the next middleware or handler. Return a response directly to short-circuit.
+
+Middleware executes in list order — first in the list is outermost. Routers without `middleware/0` work unchanged.
+
 ### Route Matching
 
 Routes are matched top-to-bottom by HTTP method and path pattern:

@@ -64,11 +64,28 @@ Clauses are matched top-to-bottom.
 
 ### Strings
 
-Strings are UTF-8 binaries. Concatenate with `<>`:
+Strings are UTF-8 binaries. Concatenate with `<>` or use interpolation:
 
 ```winn
 "Hello, " <> "World!"
+"Hello, #{name}!"
 ```
+
+#### String Interpolation
+
+Embed any expression inside `#{}` within a double-quoted string:
+
+```winn
+name = "Alice"
+IO.puts("Hello, #{name}!")
+
+count = 42
+IO.puts("There are #{to_string(count)} items")
+
+IO.puts("#{to_string(1 + 2)} is three")
+```
+
+Escape `#` with a backslash to prevent interpolation: `"\#{not interpolated}"`
 
 ### Atoms
 
@@ -161,6 +178,20 @@ x = 42
 name = "Alice"
 result = x + 10
 ```
+
+### Pattern Assignment
+
+Destructure tuples on the left side of `=`:
+
+```winn
+{:ok, value} = {:ok, 42}
+# value is now 42
+
+{:ok, {a, b}} = {:ok, {1, 2}}
+# a is 1, b is 2
+```
+
+If the pattern doesn't match, it raises a runtime error.
 
 ## Pipe Operator
 
@@ -276,6 +307,99 @@ list
   |> Enum.map()    do |x| x * 10 end
 ```
 
+## Standalone Lambdas
+
+Create anonymous functions with `fn(params) => body end`:
+
+```winn
+double = fn(x) => x * 2 end
+double(5)   # => 10
+
+add = fn(a, b) => a + b end
+add(3, 4)   # => 7
+
+constant = fn() => 42 end
+constant()  # => 42
+```
+
+Lambdas capture variables from their enclosing scope (closures):
+
+```winn
+def make_adder(n)
+  fn(x) => x + n end
+end
+
+add_ten = make_adder(10)
+add_ten(5)   # => 15
+```
+
+## For Comprehensions
+
+Iterate over a list and transform each element:
+
+```winn
+for x in [1, 2, 3] do
+  x * 10
+end
+# => [10, 20, 30]
+```
+
+Works with ranges:
+
+```winn
+for i in 1..5 do
+  i * i
+end
+# => [1, 4, 9, 16, 25]
+```
+
+## Range Literals
+
+Create a list of integers with `..`:
+
+```winn
+1..5        # => [1, 2, 3, 4, 5]
+1..1        # => [1]
+```
+
+Ranges work anywhere a list is expected:
+
+```winn
+1..10
+  |> Enum.filter() do |x| x > 5 end
+  |> Enum.map() do |x| x * 2 end
+# => [12, 14, 16, 18, 20]
+```
+
+## Map Field Access
+
+Access map fields with dot notation:
+
+```winn
+user = %{name: "Alice", age: 30}
+user.name   # => "Alice"
+user.age    # => 30
+
+resp = HTTP.get("https://api.example.com/data")
+resp.status # => 200
+resp.body   # => decoded JSON map
+```
+
+This is syntactic sugar for `maps:get(field, map)`.
+
+## Type Conversion Builtins
+
+These are available as bare function calls (no module prefix):
+
+```winn
+to_string(42)        # => "42"
+to_string(:hello)    # => "hello"
+to_integer("123")    # => 123
+to_float(5)          # => 5.0
+to_atom("hello")     # => :hello
+inspect({:ok, 42})   # => "{ok,42}"
+```
+
 ## Control Flow
 
 ### if/else
@@ -328,6 +452,22 @@ switch code
   404 => :not_found
   500 => :server_error
   _   => :unknown
+end
+```
+
+For multiple expressions in a clause body, use `do...end`:
+
+```winn
+switch status
+  :active => do
+    Logger.info("user is active")
+    :ok
+  end
+  :inactive => do
+    Logger.warn("user inactive")
+    :disabled
+  end
+  _ => :unknown
 end
 ```
 

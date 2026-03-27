@@ -27,20 +27,26 @@ Requires Erlang/OTP 28+ and rebar3.
 ### Verify
 
 ```sh
+winn version
+# => winn 0.2.0
+
 winn help
 ```
 
 You should see:
 
 ```
-Winn - a compiled language on the BEAM
+Winn 0.2.0 - a compiled language on the BEAM
 
 Usage:
-  winn new <name>       Create a new Winn project
-  winn compile          Compile all *.winn files in current directory
-  winn compile <file>   Compile a single .winn file
-  winn run <file>       Compile and run a .winn file
-  winn help             Show this help text
+  winn new <name>         Create a new Winn project
+  winn compile            Compile all .winn files (src/ or current dir)
+  winn compile <file>     Compile a single .winn file
+  winn run <file>         Compile and run a single .winn file
+  winn start              Compile project and start (keeps VM alive)
+  winn start <module>     Start with a specific module
+  winn version            Show version
+  winn help               Show this help text
 ```
 
 ### Editor Support
@@ -100,19 +106,32 @@ Compile your `.winn` files to `.beam` bytecode:
 # Compile a single file
 winn compile src/my_app.winn
 
-# Compile all .winn files in the current directory
+# Compile all .winn files in src/ (or current dir)
 winn compile
+# => Compiled 1 file(s) to ebin/
 ```
 
-Compiled `.beam` files are written to `ebin/`. You can run them directly with Erlang:
+Compiled `.beam` files are written to `ebin/`.
+
+## 5. Start a Project
+
+For multi-file projects (especially servers), use `winn start`:
 
 ```sh
-erl -pa ebin -noshell -eval 'my_app:main(), halt().'
+winn start
+```
+
+This compiles all `src/*.winn` files, loads dependencies (Cowboy, hackney, etc.), calls `main()`, and **keeps the VM alive** — essential for HTTP servers and GenServers.
+
+You can also specify which module to start:
+
+```sh
+winn start my_app
 ```
 
 ---
 
-## 5. Project Structure
+## 6. Project Structure
 
 A typical Winn project looks like this:
 
@@ -131,7 +150,7 @@ my_app/
 
 ---
 
-## 6. Your First Module
+## 7. Your First Module
 
 Winn programs are organized into modules. Each module lives in its own `.winn` file.
 
@@ -168,7 +187,7 @@ end
 
 ---
 
-## 7. Working with Data
+## 8. Working with Data
 
 ### Lists, Maps, and Tuples
 
@@ -226,7 +245,7 @@ end
 
 ---
 
-## 8. Error Handling
+## 9. Error Handling
 
 ```winn
 module SafeMath
@@ -256,7 +275,7 @@ end
 
 ---
 
-## 9. Build a Web Service
+## 10. Build a Web Service
 
 Create `src/api.winn`:
 
@@ -314,12 +333,18 @@ module MyApp
 end
 ```
 
-Compile and run:
+Start the server:
 
 ```sh
-winn compile src/api.winn
-winn compile src/my_app.winn
-erl -pa ebin -pa _build/default/lib/*/ebin -noshell -eval 'my_app:main().'
+winn start
+```
+
+Output:
+
+```
+Compiled 2 file(s) to ebin/
+Starting myapp...
+Starting server on port 4000...
 ```
 
 Test it:
@@ -339,7 +364,7 @@ curl -X POST http://localhost:4000/users \
 
 ---
 
-## 10. Add a Database Schema
+## 11. Add a Database Schema
 
 Create `src/user.winn`:
 
@@ -383,7 +408,7 @@ end
 
 ---
 
-## 11. Environment and Configuration
+## 12. Environment and Configuration
 
 ```winn
 module Config
@@ -403,7 +428,7 @@ end
 
 ---
 
-## 12. Compile Errors
+## 13. Compile Errors
 
 Winn gives you clear error messages when something goes wrong:
 
