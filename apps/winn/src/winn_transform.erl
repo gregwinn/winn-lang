@@ -262,6 +262,45 @@ transform_expr({match_block, Line, none, Clauses}) ->
     TransClauses = [transform_match_clause(C) || C <- Clauses],
     {match_block_no_scrutinee, Line, TransClauses};
 
+%% String interpolation: "Hello #{name}!" => "Hello " <> to_string(name) <> "!"
+transform_expr({interp_string, Line, Parts}) ->
+    Exprs = lists:map(fun({str, Bin}) ->
+                {string, Line, Bin};
+            ({expr, ExprStr}) ->
+                %% Re-lex and parse the interpolated expression.
+                case winn_lexer:string(ExprStr) of
+                    {ok, Tokens, _} ->
+                        %% Wrap in a dummy module/function for parsing, or parse as expr.
+                        %% We parse as a bare expression by wrapping in parens.
+                        case winn_parser:parse([{'module',1},
+                                                {module_name,1,'_X'},
+                                                {'def',1},
+                                                {ident,1,x},
+                                                {'(',1},{')',1}] ++
+                                               Tokens ++
+                                               [{'end',1},{'end',1}]) of
+                            {ok, [{module,_,'_X',[{function,_,x,[],Body}]}]} ->
+                                %% Wrap in to_string call for non-string values.
+                                Expr = case Body of
+                                    [Single] -> Single;
+                                    _ -> hd(Body)
+                                end,
+                                {dot_call, Line, 'Winn', to_string, [transform_expr(Expr)]};
+                            _ ->
+                                {string, Line, list_to_binary(ExprStr)}
+                        end;
+                    _ ->
+                        {string, Line, list_to_binary(ExprStr)}
+                end
+        end, Parts),
+    %% Concatenate all parts with <>.
+    case Exprs of
+        []     -> {string, Line, <<>>};
+        [Single] -> Single;
+        [First | Rest] ->
+            lists:foldl(fun(E, Acc) -> {op, Line, '<>', Acc, E} end, First, Rest)
+    end;
+
 %% Recursive cases.
 transform_expr({call, Line, Fun, Args}) ->
     {call, Line, Fun, lists:map(fun transform_expr/1, Args)};
@@ -271,6 +310,26 @@ transform_expr({op, Line, Op, Lhs, Rhs}) ->
     {op, Line, Op, transform_expr(Lhs), transform_expr(Rhs)};
 transform_expr({unary, Line, Op, Expr}) ->
     {unary, Line, Op, transform_expr(Expr)};
+%% For comprehension: for x in list do body end => Enum.map(list) do |x| body end
+transform_expr({for_expr, Line, Var, ListExpr, Body}) ->
+    TransList = transform_expr(ListExpr),
+    TransBody = transform_seq(Body),
+    Block = {block, Line, [{var, Line, Var}], TransBody},
+    {dot_call, Line, 'Enum', map, [TransList, Block]};
+
+transform_expr({field_access, Line, Expr, Field}) ->
+    {field_access, Line, transform_expr(Expr), Field};
+%% Pattern assignment: {:ok, x} = expr => case expr of {:ok, X} -> {:ok, X} end
+%% Desugars to a case expression. Variables bound in the pattern become
+%% available in subsequent expressions (handled by gen_body's let scoping).
+transform_expr({pat_assign, Line, Pat, Expr}) ->
+    TransExpr = transform_expr(Expr),
+    %% Convert tuple literal to pattern
+    CasePat = lit_to_pat(Pat),
+    %% The body returns the matched value so it can be used
+    CaseClause = {case_clause, Line, [CasePat], none, [TransExpr]},
+    {pat_assign_case, Line, CasePat, {case_expr, Line, TransExpr, [CaseClause]}};
+
 transform_expr({assign, Line, Pat, Expr}) ->
     {assign, Line, Pat, transform_expr(Expr)};
 transform_expr({list, Line, Elements}) ->
@@ -310,6 +369,27 @@ transform_expr({try_expr, Line, TryBody, RescueClauses}) ->
 %% Leaf nodes — no transformation needed.
 transform_expr(Leaf) ->
     Leaf.
+
+%% ── Literal to pattern conversion ─────────────────────────────────────────
+%% Converts AST expression nodes to pattern nodes for pat_assign.
+
+lit_to_pat({tuple, Line, Elems}) ->
+    {pat_tuple, Line, [lit_to_pat(E) || E <- Elems]};
+lit_to_pat({list, Line, Elems}) ->
+    {pat_list, Line, [lit_to_pat(E) || E <- Elems], nil};
+lit_to_pat({atom, Line, V}) ->
+    {pat_atom, Line, V};
+lit_to_pat({integer, Line, V}) ->
+    {pat_integer, Line, V};
+lit_to_pat({var, Line, Name}) ->
+    {pat_var, Line, Name};
+lit_to_pat({pat_wildcard, _} = P) -> P;
+lit_to_pat({pat_var, _, _} = P) -> P;
+lit_to_pat({pat_atom, _, _} = P) -> P;
+lit_to_pat({pat_integer, _, _} = P) -> P;
+lit_to_pat({pat_tuple, _, _} = P) -> P;
+lit_to_pat({pat_list, _, _, _} = P) -> P;
+lit_to_pat(Other) -> Other.
 
 %% ── Match clause desugaring ────────────────────────────────────────────────
 %%

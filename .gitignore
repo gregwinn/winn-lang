@@ -1,2 +1,4 @@
 .DS_*
 .env
+_build/
+rebar.lock

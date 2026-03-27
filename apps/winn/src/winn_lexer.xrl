@@ -60,6 +60,9 @@ worker                      : {token, {'worker', TokenLine}}.
 genserver                   : {token, {'genserver', TokenLine}}.
 timestamps                  : {token, {'timestamps', TokenLine}}.
 field                       : {token, {'field', TokenLine}}.
+fn                          : {token, {'fn', TokenLine}}.
+for                         : {token, {'for', TokenLine}}.
+in                          : {token, {'in', TokenLine}}.
 from                        : {token, {'from_kw', TokenLine}}.
 where                       : {token, {'where_kw', TokenLine}}.
 order_by                    : {token, {'order_by', TokenLine}}.
@@ -76,8 +79,8 @@ preload                     : {token, {'preload', TokenLine}}.
 %% Integer
 {D}+                        : {token, {integer_lit, TokenLine, list_to_integer(TokenChars)}}.
 
-%% String literal (double-quoted, no interpolation in Phase 1)
-\"[^\"]*\"                  : {token, {string_lit, TokenLine, lex_string(TokenChars)}}.
+%% String literal (double-quoted, supports #{expr} interpolation)
+\"[^\"]*\"                  : make_string_token(TokenLine, TokenChars).
 
 %% Uppercase identifier = module name reference (Blog, IO, String, etc.)
 {UC}{AN}*                   : {token, {module_name, TokenLine, list_to_atom(TokenChars)}}.
@@ -114,10 +117,48 @@ _                           : {token, {'_', TokenLine}}.
 
 Erlang code.
 
-%% Strip surrounding quotes and process escape sequences.
-lex_string(Chars) ->
+%% String token constructor — detects interpolation.
+make_string_token(Line, Chars) ->
     Inner = lists:sublist(Chars, 2, length(Chars) - 2),
-    list_to_binary(unescape(Inner)).
+    case has_interpolation(Inner) of
+        false ->
+            {token, {string_lit, Line, list_to_binary(unescape(Inner))}};
+        true ->
+            Parts = parse_interp(Inner, [], []),
+            {token, {interp_string, Line, Parts}}
+    end.
+
+has_interpolation([]) -> false;
+has_interpolation([$\\, $# | Rest]) -> has_interpolation(Rest);
+has_interpolation([$#, ${ | _]) -> true;
+has_interpolation([_ | Rest]) -> has_interpolation(Rest).
+
+%% Parse interpolated string into [{str, Binary} | {expr, String}] parts.
+parse_interp([], [], Acc) ->
+    lists:reverse(Acc);
+parse_interp([], Cur, Acc) ->
+    lists:reverse([{str, list_to_binary(unescape(lists:reverse(Cur)))} | Acc]);
+parse_interp([$\\, $# | Rest], Cur, Acc) ->
+    parse_interp(Rest, [$# | Cur], Acc);
+parse_interp([$#, ${ | Rest], Cur, Acc) ->
+    Acc2 = case Cur of
+        [] -> Acc;
+        _  -> [{str, list_to_binary(unescape(lists:reverse(Cur)))} | Acc]
+    end,
+    {ExprChars, Rest2} = extract_interp_expr(Rest, 0, []),
+    parse_interp(Rest2, [], [{expr, ExprChars} | Acc2]);
+parse_interp([C | Rest], Cur, Acc) ->
+    parse_interp(Rest, [C | Cur], Acc).
+
+%% Extract characters inside #{...}, handling nested braces.
+extract_interp_expr([$} | Rest], 0, Acc) ->
+    {lists:reverse(Acc), Rest};
+extract_interp_expr([${ | Rest], Depth, Acc) ->
+    extract_interp_expr(Rest, Depth + 1, [${ | Acc]);
+extract_interp_expr([$} | Rest], Depth, Acc) ->
+    extract_interp_expr(Rest, Depth - 1, [$} | Acc]);
+extract_interp_expr([C | Rest], Depth, Acc) ->
+    extract_interp_expr(Rest, Depth, [C | Acc]).
 
 unescape([]) -> [];
 unescape([$\\, $n  | Rest]) -> [$\n | unescape(Rest)];
