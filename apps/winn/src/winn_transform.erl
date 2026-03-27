@@ -29,7 +29,8 @@ transform_form({module, Line, Name, Body}) ->
 
     %% Expand use directives.
     Expanded       = [expand_use(ULine, Mod, Sub, Name) || {use_directive, ULine, Mod, Sub} <- UseDirs],
-    BehaviourAttrs = [Attr || {behaviour, Attr, _} <- Expanded],
+    BehaviourAttrs = [Attr || {behaviour, Attr, _} <- Expanded]
+                  ++ [Attr || {behaviour_only, Attr} <- Expanded],
     SyntheticFns   = [Fn   || {behaviour, _, Fn}   <- Expanded],
 
     %% Expand schema defs into generated functions, then case-wrap pattern params.
@@ -70,6 +71,15 @@ expand_use(Line, 'Winn', 'Supervisor', ModName) ->
             {var, Line, args}
         ]}]},
     {behaviour, Attr, StartLink};
+expand_use(Line, 'Winn', 'Application', _ModName) ->
+    Attr = {behaviour_attr, Line, application},
+    {behaviour_only, Attr};
+expand_use(Line, 'Winn', 'WebSocket', _ModName) ->
+    Attr = {behaviour_attr, Line, winn_ws_handler},
+    {behaviour_only, Attr};
+expand_use(Line, 'Winn', 'Task', _ModName) ->
+    Attr = {behaviour_attr, Line, winn_task},
+    {behaviour_only, Attr};
 expand_use(_Line, 'Winn', 'Schema', _ModName) ->
     {schema_use, none}.
 

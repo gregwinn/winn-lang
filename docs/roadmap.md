@@ -513,10 +513,10 @@ end
 | R3 | DateTime | done |
 | R4 | structured logging | done |
 | R5 | crypto/hashing | done |
-| M1 | HTTP client | planned |
-| M2 | config system | planned |
-| M3 | application startup | planned |
-| M4 | task/async | planned |
-| M5 | JWT | planned |
-| M6 | WebSockets | planned |
+| M1 | HTTP client | done |
+| M2 | config system | done |
+| M3 | application startup | done |
+| M4 | task/async | done |
+| M5 | JWT | done |
+| M6 | WebSockets | done |
 | C1 | CLI task runner | planned |
