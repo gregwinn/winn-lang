@@ -44,7 +44,7 @@ Terminals
     'and' 'or' 'not'
     ident module_name
     atom_lit integer_lit float_lit string_lit interp_string boolean_lit
-    '|>' '=>'
+    '|>' '=>' '..'
     '<>'
     '==' '!='
     '<=' '>='
@@ -133,6 +133,7 @@ add_expr -> mul_expr                       : '$1'.
 add_expr -> add_expr '+' mul_expr   : {op, line('$2'), '+',  '$1', '$3'}.
 add_expr -> add_expr '-' mul_expr   : {op, line('$2'), '-',  '$1', '$3'}.
 add_expr -> add_expr '<>' mul_expr  : {op, line('$2'), '<>', '$1', '$3'}.
+add_expr -> add_expr '..' mul_expr : {range, line('$2'), '$1', '$3'}.
 
 mul_expr -> unary_expr                     : '$1'.
 mul_expr -> mul_expr '*' unary_expr : {op, line('$2'), '*', '$1', '$3'}.
@@ -313,8 +314,12 @@ switch_clauses -> switch_clause switch_clauses
 
 switch_clause -> pattern '=>' expr
     : {switch_clause, line('$2'), '$1', none, ['$3']}.
+switch_clause -> pattern '=>' 'do' expr_seq 'end'
+    : {switch_clause, line('$2'), '$1', none, '$4'}.
 switch_clause -> pattern 'when' expr '=>' expr
     : {switch_clause, line('$1'), '$1', '$3', ['$5']}.
+switch_clause -> pattern 'when' expr '=>' 'do' expr_seq 'end'
+    : {switch_clause, line('$1'), '$1', '$3', '$6'}.
 
 %% ── Try/rescue expression ───────────────────────────────────────────────
 
@@ -331,6 +336,8 @@ rescue_clause_list -> rescue_clause
 rescue_clause_list -> rescue_clause rescue_clause_list
     : ['$1' | '$2'].
 
+rescue_clause -> pattern '=>' 'do' expr_seq 'end'
+    : {rescue_clause, line('$2'), '$1', '$4'}.
 rescue_clause -> pattern '=>' expr
     : {rescue_clause, line('$2'), '$1', ['$3']}.
 

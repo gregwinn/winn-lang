@@ -27,6 +27,7 @@ Rules.
 !=                          : {token, {'!=', TokenLine}}.
 <=                          : {token, {'<=', TokenLine}}.
 >=                          : {token, {'>=', TokenLine}}.
+\.\.                        : {token, {'..', TokenLine}}.
 
 %% Keywords — must appear before the identifier catch-all
 module                      : {token, {'module', TokenLine}}.

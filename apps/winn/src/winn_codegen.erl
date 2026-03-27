@@ -78,7 +78,13 @@ gen_expr({case_expr, _Line, Scrutinee, Clauses}) ->
     CerlClauses   = [gen_case_clause(C) || C <- Clauses],
     cerl:c_case(CerlScrutinee, CerlClauses);
 
-%% Local call
+%% Local call — check for built-in runtime functions first.
+gen_expr({call, _Line, Fun, Args}) when
+        Fun =:= to_string; Fun =:= to_integer;
+        Fun =:= to_float;  Fun =:= to_atom;
+        Fun =:= inspect ->
+    CArgs = [gen_expr(A) || A <- Args],
+    cerl:c_call(cerl:c_atom(winn_runtime), cerl:c_atom(Fun), CArgs);
 gen_expr({call, _Line, Fun, Args}) ->
     Op    = cerl:c_var({fn_atom(Fun), length(Args)}),
     CArgs = [gen_expr(A) || A <- Args],
@@ -169,6 +175,11 @@ gen_expr({try_expr, _Line, Body, RescueClauses}) ->
                cerl:c_let([CatchVar],
                           cerl:c_tuple([ExcClass, ExcVal, ExcTrace]),
                           CatchCase));
+
+%% Range: 1..10 => lists:seq(1, 10)
+gen_expr({range, _Line, From, To}) ->
+    cerl:c_call(cerl:c_atom(lists), cerl:c_atom(seq),
+                [gen_expr(From), gen_expr(To)]);
 
 %% Map field access: user.name => maps:get(name, User)
 gen_expr({field_access, _Line, Expr, Field}) ->

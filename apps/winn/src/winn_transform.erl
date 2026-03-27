@@ -317,6 +317,8 @@ transform_expr({for_expr, Line, Var, ListExpr, Body}) ->
     Block = {block, Line, [{var, Line, Var}], TransBody},
     {dot_call, Line, 'Enum', map, [TransList, Block]};
 
+transform_expr({range, Line, From, To}) ->
+    {range, Line, transform_expr(From), transform_expr(To)};
 transform_expr({field_access, Line, Expr, Field}) ->
     {field_access, Line, transform_expr(Expr), Field};
 %% Pattern assignment: {:ok, x} = expr => case expr of {:ok, X} -> {:ok, X} end
