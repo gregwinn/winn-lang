@@ -508,11 +508,11 @@ end
 | L2 | switch | done |
 | L3 | guards (when) | done |
 | L4 | try/rescue | done |
-| R1 | env vars | planned |
-| R2 | UUID | planned |
-| R3 | DateTime | planned |
-| R4 | structured logging | planned |
-| R5 | crypto/hashing | planned |
+| R1 | env vars | done |
+| R2 | UUID | done |
+| R3 | DateTime | done |
+| R4 | structured logging | done |
+| R5 | crypto/hashing | done |
 | M1 | HTTP client | planned |
 | M2 | config system | planned |
 | M3 | application startup | planned |

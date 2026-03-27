@@ -69,7 +69,22 @@
     to_atom/1,
 
     %% Introspection
-    inspect/1
+    inspect/1,
+
+    %% R1 — System (environment variables)
+    'system.get_env'/1,
+    'system.get_env'/2,
+    'system.put_env'/2,
+
+    %% R2 — UUID
+    'uuid.v4'/0,
+
+    %% R3 — DateTime
+    'datetime.now'/0,
+    'datetime.to_iso8601'/1,
+    'datetime.from_iso8601'/1,
+    'datetime.diff'/2,
+    'datetime.format'/2
 ]).
 
 %% ── IO ─────────────────────────────────────────────────────────────────────
@@ -289,3 +304,81 @@ to_atom(L) when is_list(L)          -> list_to_atom(L).
 
 inspect(Term) ->
     list_to_binary(io_lib:format("~p", [Term])).
+
+%% ── R1 — System (environment variables) ─────────────────────────────────
+
+'system.get_env'(Key) when is_binary(Key) ->
+    case os:getenv(binary_to_list(Key)) of
+        false -> nil;
+        Val   -> list_to_binary(Val)
+    end.
+
+'system.get_env'(Key, Default) when is_binary(Key), is_binary(Default) ->
+    case os:getenv(binary_to_list(Key)) of
+        false -> Default;
+        Val   -> list_to_binary(Val)
+    end.
+
+'system.put_env'(Key, Val) when is_binary(Key), is_binary(Val) ->
+    os:putenv(binary_to_list(Key), binary_to_list(Val)),
+    ok.
+
+%% ── R2 — UUID ───────────────────────────────────────────────────────────
+
+'uuid.v4'() ->
+    <<A:32, B:16, _:4, C:12, _:2, D:14, E:48>> = crypto:strong_rand_bytes(16),
+    Bin = <<A:32, B:16, 4:4, C:12, 2#10:2, D:14, E:48>>,
+    Hex = bin_to_hex(Bin),
+    %% Hex is 32 chars; split into 8-4-4-4-12
+    <<P1:8/binary, P2:4/binary, P3:4/binary, P4:4/binary, P5:12/binary>> = Hex,
+    <<P1/binary, $-, P2/binary, $-, P3/binary, $-, P4/binary, $-, P5/binary>>.
+
+bin_to_hex(Bin) ->
+    list_to_binary([io_lib:format("~2.16.0b", [B]) || <<B>> <= Bin]).
+
+%% ── R3 — DateTime ──────────────────────────────────────────────────────
+
+'datetime.now'() ->
+    os:system_time(second).
+
+'datetime.to_iso8601'(Timestamp) when is_integer(Timestamp) ->
+    GregorianSecs = Timestamp + 62167219200,  %% epoch offset
+    {{Y,Mo,D},{H,Mi,S}} = calendar:gregorian_seconds_to_datetime(GregorianSecs),
+    list_to_binary(io_lib:format("~4..0B-~2..0B-~2..0BT~2..0B:~2..0B:~2..0BZ",
+                                 [Y, Mo, D, H, Mi, S])).
+
+'datetime.from_iso8601'(Bin) when is_binary(Bin) ->
+    Str = binary_to_list(Bin),
+    case io_lib:fread("~4d-~2d-~2dT~2d:~2d:~2d", Str) of
+        {ok, [Y,Mo,D,H,Mi,S], _} ->
+            GregorianSecs = calendar:datetime_to_gregorian_seconds({{Y,Mo,D},{H,Mi,S}}),
+            {ok, GregorianSecs - 62167219200};
+        _ ->
+            {error, <<"invalid ISO 8601 format">>}
+    end.
+
+'datetime.diff'(T1, T2) when is_integer(T1), is_integer(T2) ->
+    T1 - T2.
+
+'datetime.format'(Timestamp, FormatBin) when is_integer(Timestamp), is_binary(FormatBin) ->
+    GregorianSecs = Timestamp + 62167219200,
+    {{Y,Mo,D},{H,Mi,S}} = calendar:gregorian_seconds_to_datetime(GregorianSecs),
+    Format = binary_to_list(FormatBin),
+    Result = lists:flatten(format_dt(Format, Y, Mo, D, H, Mi, S)),
+    list_to_binary(Result).
+
+format_dt([], _Y, _Mo, _D, _H, _Mi, _S) -> [];
+format_dt([$%, $Y | Rest], Y, Mo, D, H, Mi, S) ->
+    [io_lib:format("~4..0B", [Y]) | format_dt(Rest, Y, Mo, D, H, Mi, S)];
+format_dt([$%, $m | Rest], Y, Mo, D, H, Mi, S) ->
+    [io_lib:format("~2..0B", [Mo]) | format_dt(Rest, Y, Mo, D, H, Mi, S)];
+format_dt([$%, $d | Rest], Y, Mo, D, H, Mi, S) ->
+    [io_lib:format("~2..0B", [D]) | format_dt(Rest, Y, Mo, D, H, Mi, S)];
+format_dt([$%, $H | Rest], Y, Mo, D, H, Mi, S) ->
+    [io_lib:format("~2..0B", [H]) | format_dt(Rest, Y, Mo, D, H, Mi, S)];
+format_dt([$%, $M | Rest], Y, Mo, D, H, Mi, S) ->
+    [io_lib:format("~2..0B", [Mi]) | format_dt(Rest, Y, Mo, D, H, Mi, S)];
+format_dt([$%, $S | Rest], Y, Mo, D, H, Mi, S) ->
+    [io_lib:format("~2..0B", [S]) | format_dt(Rest, Y, Mo, D, H, Mi, S)];
+format_dt([C | Rest], Y, Mo, D, H, Mi, S) ->
+    [C | format_dt(Rest, Y, Mo, D, H, Mi, S)].

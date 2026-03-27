@@ -103,7 +103,7 @@ preload                     : {token, {'preload', TokenLine}}.
 ,                           : {token, {',', TokenLine}}.
 :                           : {token, {':', TokenLine}}.
 \|                          : {token, {'|', TokenLine}}.
-%                           : {token, {'%', TokenLine}}.
+\%                          : {token, {'%', TokenLine}}.
 \(                          : {token, {'(', TokenLine}}.
 \)                          : {token, {')', TokenLine}}.
 \[                          : {token, {'[', TokenLine}}.

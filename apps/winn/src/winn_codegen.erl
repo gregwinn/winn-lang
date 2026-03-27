@@ -255,6 +255,14 @@ resolve_dot_call('GenServer', Fun) -> {gen_server, Fun};
 resolve_dot_call('Supervisor', Fun) -> {supervisor, Fun};
 resolve_dot_call('Repo', Fun)       -> {winn_repo, Fun};
 resolve_dot_call('Changeset', Fun)  -> {winn_changeset, Fun};
+resolve_dot_call('System', Fun) ->
+    {winn_runtime, list_to_atom("system." ++ atom_to_list(Fun))};
+resolve_dot_call('UUID', Fun) ->
+    {winn_runtime, list_to_atom("uuid." ++ atom_to_list(Fun))};
+resolve_dot_call('DateTime', Fun) ->
+    {winn_runtime, list_to_atom("datetime." ++ atom_to_list(Fun))};
+resolve_dot_call('Logger', Fun)  -> {winn_logger, Fun};
+resolve_dot_call('Crypto', Fun)  -> {winn_crypto, Fun};
 resolve_dot_call(Mod, Fun) ->
     ErlMod = list_to_atom(string:lowercase(atom_to_list(Mod))),
     {ErlMod, Fun}.
