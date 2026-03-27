@@ -21,27 +21,59 @@ Winn is a Ruby/Elixir-inspired language that compiles to the BEAM (Erlang VM). I
 - **Config** — ETS-backed config with `Config.get/put/load`
 - **Compiles to BEAM** — runs on the battle-tested Erlang virtual machine
 
-## Quick Start
+## Install
 
-### Prerequisites
+### Homebrew (macOS)
+
+```sh
+brew tap gregwinn/winn
+brew install winn
+```
+
+This installs the `winn` CLI to your PATH. Requires Erlang/OTP 28+ (installed automatically by Homebrew if needed).
+
+### Upgrade
+
+```sh
+brew upgrade winn
+```
+
+### Uninstall
+
+```sh
+brew uninstall winn
+brew untap gregwinn/winn
+```
+
+### From Source
+
+If you prefer to build from source:
+
+```sh
+git clone https://github.com/gregwinn/winn-lang.git
+cd winn-lang
+rebar3 escriptize
+```
+
+The `winn` binary is at `./_build/default/bin/winn`. Add it to your PATH or copy it somewhere in your PATH:
+
+```sh
+cp _build/default/bin/winn /usr/local/bin/
+```
+
+#### Prerequisites (from source)
 
 - Erlang/OTP 28+
 - rebar3
 
-### Build
-
-```sh
-git clone <repo>
-cd language-winn
-rebar3 compile
-```
-
-### Run Tests
+#### Run Tests
 
 ```sh
 rebar3 eunit
-# => 238 tests, 0 failures
+# => 294 tests, 0 failures
 ```
+
+## Quick Start
 
 ### Hello World
 
