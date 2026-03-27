@@ -484,6 +484,169 @@ end
 
 ---
 
+## Medium Impact — Quality of Life (Planned)
+
+---
+
+### MI1 — HTTP Middleware System
+
+**Goal:** Before/after hooks for HTTP request processing — auth, CORS, logging, etc.
+
+**Syntax:**
+```winn
+module MyApp.Router
+  use Winn.Router
+
+  def middleware()
+    [:log_request, :cors, :authenticate]
+  end
+
+  def log_request(conn, next)
+    Logger.info("#{Server.method(conn)} #{Server.path(conn)}")
+    next(conn)
+  end
+
+  def cors(conn, next)
+    conn = Server.set_header(conn, "access-control-allow-origin", "*")
+    next(conn)
+  end
+
+  def authenticate(conn, next)
+    match Server.header(conn, "authorization")
+      nil => Server.json(conn, %{error: "unauthorized"}, 401)
+      token => next(conn)
+    end
+  end
+end
+```
+
+**Implementation:**
+- Add `middleware/0` callback to router convention (returns list of function name atoms)
+- In `winn_router.erl` `init/2`: after matching route, chain middleware fns before calling handler
+- Each middleware receives `(conn, next_fn)` where `next_fn` is a closure over the remaining chain
+- Add `Server.set_header/3` to `winn_server.erl`
+- No lexer/parser changes needed
+
+**Tests:** `winn_mi1_tests.erl` — middleware ordering, short-circuit (auth fail), header injection
+
+---
+
+### MI2 — to_string / to_integer Callable from Winn
+
+**Goal:** Make type conversion functions directly callable without module prefix.
+
+**Syntax:**
+```winn
+to_string(42)        # => "42"
+to_integer("42")     # => 42
+to_float("3.14")     # => 3.14
+to_atom("hello")     # => :hello
+```
+
+**Implementation:**
+- In `winn_codegen.erl` `gen_expr({call, _, Fun, Args})`: check if `Fun` is one of `to_string`, `to_integer`, `to_float`, `to_atom`
+- If so, emit `cerl:c_call(cerl:c_atom(winn_runtime), cerl:c_atom(Fun), Args)` instead of `cerl:c_apply`
+- No lexer/parser/transform changes needed — just a codegen special case
+
+**Tests:** `winn_mi2_tests.erl` — e2e compile `to_string(42)`, `to_integer("5")`, etc.
+
+---
+
+### MI3 — Range Literals
+
+**Goal:** `1..10` syntax for generating integer sequences.
+
+**Syntax:**
+```winn
+1..5             # => [1, 2, 3, 4, 5]
+for i in 1..10 do
+  IO.puts(to_string(i))
+end
+```
+
+**Implementation:**
+- Lexer: add `..` two-character operator token (before single `.` rule)
+- Parser: `range_expr -> expr '..' expr` producing `{range, Line, From, To}`
+- Transform: pass through
+- Codegen: `gen_expr({range,...})` → `cerl:c_call(cerl:c_atom(lists), cerl:c_atom(seq), [From, To])`
+- Alternatively, add `Range.new/2` to `winn_runtime.erl` for step support later
+
+**Tests:** `winn_mi3_tests.erl` — `1..5`, `5..1` (empty or reverse?), `for x in 1..3`
+
+---
+
+### MI4 — Multi-line Switch/Rescue Bodies
+
+**Goal:** Allow multiple expressions in switch clause and rescue clause bodies.
+
+**Current limitation:** Switch/rescue clause bodies are single expressions due to parser ambiguity (no newline tokens).
+
+**Syntax (desired):**
+```winn
+switch status
+  :active =>
+    Logger.info("active")
+    :ok
+  :inactive =>
+    Logger.warn("inactive")
+    :disabled
+end
+```
+
+**Implementation options:**
+
+**Option A: Add significant newlines.** Add a newline token emitted by the lexer when not inside `()`, `[]`, `{}`. Use it as a clause body terminator. This is the cleanest long-term solution but requires reworking the lexer's whitespace handling (add a depth counter for brackets).
+
+**Option B: Use `do...end` for multi-line bodies.**
+```winn
+switch status
+  :active => do
+    Logger.info("active")
+    :ok
+  end
+  :inactive => do
+    Logger.warn("inactive")
+    :disabled
+  end
+end
+```
+
+**Option C: Require explicit `begin...end` blocks.** Similar to B but different keyword.
+
+**Recommended:** Option A (significant newlines) for the best developer experience, but it's a larger change. Option B is a pragmatic interim solution.
+
+**Tests:** `winn_mi4_tests.erl` — multi-expression switch/rescue bodies
+
+---
+
+### MI5 — Better Compiler Error Messages
+
+**Goal:** Human-readable errors with source file, line number, and context.
+
+**Current state:** Errors are raw Erlang tuples (`{error, {Line, winn_parser, [...]}}`) with no source context.
+
+**Syntax (desired output):**
+```
+error: unexpected token 'end'
+  --> src/app.winn:15:3
+   |
+15 |   end
+   |   ^^^ expected expression
+```
+
+**Implementation:**
+- Create `winn_errors.erl` module with `format_error/2` (takes error tuple + source string)
+- Lexer errors: `{Line, winn_lexer, {illegal, Char}}` → "illegal character `X` at line N"
+- Parser errors: `{Line, winn_parser, Msg}` → "syntax error at line N: ..."
+- Core lint errors: extract from `compile:forms` error tuples
+- Add source line context by splitting source on newlines and showing the relevant line
+- Integrate into `winn.erl` `compile_file/2` and `winn_cli.erl` error paths
+- Color output (ANSI codes) when outputting to terminal
+
+**Tests:** `winn_mi5_tests.erl` — verify error message format for known bad inputs
+
+---
+
 ## Build Order Suggestions
 
 **If building for a service that calls external APIs:**
@@ -520,3 +683,15 @@ end
 | M5 | JWT | done |
 | M6 | WebSockets | done |
 | C1 | CLI task runner | planned |
+| HI1 | String interpolation | done |
+| HI2 | Map field access | done |
+| HI3 | Standalone lambdas | done |
+| HI4 | Pattern assignment | done |
+| HI5 | JSON module | done |
+| HI6 | for comprehensions | done |
+| S1 | HTTP server (Cowboy) | done |
+| MI1 | Middleware system | planned |
+| MI2 | to_string/to_integer from Winn | planned |
+| MI3 | Range literals (1..10) | planned |
+| MI4 | Multi-line switch/rescue bodies | planned |
+| MI5 | Better compiler error messages | planned |
