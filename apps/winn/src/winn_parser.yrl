@@ -30,12 +30,15 @@ Nonterminals
     list_lit tuple_lit map_lit map_pairs map_pair
     pattern pattern_elems
     match_expr match_clauses match_clause_body match_clause
+    if_expr switch_expr switch_clauses switch_clause
+    try_expr rescue_clauses rescue_clause_list rescue_clause
     schema_def field_list field_item.
 
 %% Phase 1 terminals + Phase 2 additions.
 Terminals
     'module' 'def' 'do' 'end' 'use' 'schema' 'field'
     'match' 'ok_kw' 'err_kw' 'nil_kw'
+    'if' 'else' 'switch' 'when' 'try' 'rescue'
     'and' 'or' 'not'
     ident module_name
     atom_lit integer_lit float_lit string_lit boolean_lit
@@ -79,6 +82,9 @@ use_directive -> 'use' module_name '.' module_name
 
 function_def -> 'def' ident '(' param_list ')' expr_seq 'end'
     : {function, line('$1'), val('$2'), '$4', '$6'}.
+
+function_def -> 'def' ident '(' param_list ')' 'when' expr expr_seq 'end'
+    : {function_g, line('$1'), val('$2'), '$4', '$7', '$8'}.
 
 param_list -> '$empty'       : [].
 param_list -> pattern_list   : '$1'.
@@ -142,6 +148,9 @@ primary_expr -> ident                      : {var, line('$1'), val('$1')}.
 primary_expr -> literal                    : '$1'.
 primary_expr -> '(' expr ')'               : '$2'.
 primary_expr -> match_expr                 : '$1'.
+primary_expr -> if_expr                    : '$1'.
+primary_expr -> switch_expr                : '$1'.
+primary_expr -> try_expr                   : '$1'.
 
 %% Assignment: x = expr (parsed at statement level via primary_expr)
 primary_expr -> ident '=' expr
@@ -274,6 +283,46 @@ pattern -> '[' pattern_elems '|' pattern ']'
 
 pattern_elems -> pattern                        : ['$1'].
 pattern_elems -> pattern ',' pattern_elems      : ['$1' | '$3'].
+
+%% ── If/else expression ───────────────────────────────────────────────────
+
+if_expr -> 'if' expr expr_seq 'else' expr_seq 'end'
+    : {if_expr, line('$1'), '$2', '$3', '$5'}.
+if_expr -> 'if' expr expr_seq 'end'
+    : {if_expr, line('$1'), '$2', '$3', []}.
+
+%% ── Switch expression ───────────────────────────────────────────────────
+
+switch_expr -> 'switch' expr switch_clauses 'end'
+    : {switch_expr, line('$1'), '$2', '$3'}.
+
+switch_clauses -> '$empty'
+    : [].
+switch_clauses -> switch_clause switch_clauses
+    : ['$1' | '$2'].
+
+switch_clause -> pattern '=>' expr
+    : {switch_clause, line('$2'), '$1', none, ['$3']}.
+switch_clause -> pattern 'when' expr '=>' expr
+    : {switch_clause, line('$1'), '$1', '$3', ['$5']}.
+
+%% ── Try/rescue expression ───────────────────────────────────────────────
+
+try_expr -> 'try' expr_seq rescue_clauses 'end'
+    : {try_expr, line('$1'), '$2', '$3'}.
+
+rescue_clauses -> '$empty'
+    : [].
+rescue_clauses -> 'rescue' rescue_clause_list
+    : '$2'.
+
+rescue_clause_list -> rescue_clause
+    : ['$1'].
+rescue_clause_list -> rescue_clause rescue_clause_list
+    : ['$1' | '$2'].
+
+rescue_clause -> pattern '=>' expr
+    : {rescue_clause, line('$2'), '$1', ['$3']}.
 
 %% ── Schema definition ─────────────────────────────────────────────────────
 

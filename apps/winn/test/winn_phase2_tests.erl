@@ -118,8 +118,10 @@ transform_pattern_wrap_test() ->
 
 transform_pipe_match_test() ->
     Src = "module M def f(x) x |> match ok v => v err e => e end end end",
-    [{module,_,'M',[{function,_,f,[_],[CaseExpr]}]}] = transform(Src),
-    {case_expr, _, {var,_,x}, [C1, C2]} = CaseExpr,
+    [{module,_,'M',[{function,_,f,[_],[OuterCase]}]}] = transform(Src),
+    %% Outer case wraps the param, inner case is the pipe-match.
+    {case_expr, _, _, [{case_clause, _, _, _, [InnerCase]}]} = OuterCase,
+    {case_expr, _, _, [C1, C2]} = InnerCase,
     ?assertMatch({case_clause,_,[{pat_tuple,_,[{pat_atom,_,ok},_]}],_,_}, C1),
     ?assertMatch({case_clause,_,[{pat_tuple,_,[{pat_atom,_,error},_]}],_,_}, C2).
 

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "stdlib.md",
+                "file": "roadmap.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "stdlib"
+              "title": "roadmap"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "stdlib.md",
+                "file": "roadmap.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for stdlib"
+              "title": "Backlinks for roadmap"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "stdlib.md",
+                "file": "roadmap.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from stdlib"
+              "title": "Outgoing links from roadmap"
             }
           },
           {
@@ -156,13 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "stdlib.md",
+                "file": "roadmap.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of stdlib"
+              "title": "Outline of roadmap"
             }
           }
         ]
@@ -185,6 +185,8 @@
   },
   "active": "a87426159dcfcdbe",
   "lastOpenFiles": [
+    "stdlib.md",
+    "roadmap.md",
     "otp.md",
     "orm.md",
     "language.md",

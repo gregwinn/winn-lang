@@ -100,24 +100,27 @@ expand_schema_def({schema_def, L, TableBin, Fields}) ->
 
 %% ── Function transformation ────────────────────────────────────────────────
 
+transform_function({function_g, Line, Name, Params, Guard, Body}) ->
+    TransBody  = transform_seq(Body),
+    TransGuard = transform_expr(Guard),
+    Arity   = length(Params),
+    ArgVars = fresh_arg_vars(Line, Arity),
+    Scrutinee = case Arity of
+        1 -> hd(ArgVars);
+        _ -> {tuple, Line, ArgVars}
+    end,
+    CasePat = case Arity of
+        1 -> hd(Params);
+        _ -> {pat_tuple, Line, Params}
+    end,
+    CaseClause = {case_clause, Line, [CasePat], TransGuard, TransBody},
+    {function, Line, Name, ArgVars, [{case_expr, Line, Scrutinee, [CaseClause]}]};
+
 transform_function({function, Line, Name, Params, Body}) ->
     TransBody = transform_seq(Body),
-    case needs_case_wrap(Params) of
-        false ->
-            %% All params are simple variables — no wrapping needed.
-            {function, Line, Name, Params, TransBody};
-        true ->
-            %% At least one param is a pattern — wrap body in case.
-            wrap_in_case(Line, Name, Params, TransBody)
-    end.
-
-%% A param is "simple" if it's just a variable binding (no pattern).
-needs_case_wrap(Params) ->
-    lists:any(fun is_pattern_param/1, Params).
-
-is_pattern_param({var, _, _})         -> false;  %% simple variable
-is_pattern_param({pat_wildcard, _})   -> false;  %% _ also doesn't need wrapping
-is_pattern_param(_)                   -> true.   %% tuple/atom/integer pattern
+    %% Always case-wrap so that multi-clause functions (some guarded, some not)
+    %% can be merged into a single case expression.
+    wrap_in_case(Line, Name, Params, TransBody).
 
 %% Wrap pattern-param function into a case expression.
 %%   def foo({:ok, x}) body end
@@ -267,6 +270,29 @@ transform_expr({map, Line, Pairs}) ->
 %% Block (closure) — body already transformed above, leave node intact.
 transform_expr({block, Line, Params, Body}) ->
     {block, Line, Params, Body};
+
+%% L1 — if/else desugared to case
+transform_expr({if_expr, Line, Cond, Then, []}) ->
+    TrueClause = {case_clause, Line, [{pat_atom, Line, true}], none, transform_seq(Then)},
+    {case_expr, Line, transform_expr(Cond), [TrueClause]};
+
+transform_expr({if_expr, Line, Cond, Then, Else}) ->
+    TrueClause  = {case_clause, Line, [{pat_atom, Line, true}], none, transform_seq(Then)},
+    FalseClause = {case_clause, Line, [{pat_wildcard, Line}],   none, transform_seq(Else)},
+    {case_expr, Line, transform_expr(Cond), [TrueClause, FalseClause]};
+
+%% L2 — switch desugared to case
+transform_expr({switch_expr, Line, Scrutinee, Clauses}) ->
+    CaseClauses = [{case_clause, CL, [Pat], Guard, transform_seq(Body)}
+                   || {switch_clause, CL, Pat, Guard, Body} <- Clauses],
+    {case_expr, Line, transform_expr(Scrutinee), CaseClauses};
+
+%% L4 — try/rescue
+transform_expr({try_expr, Line, TryBody, RescueClauses}) ->
+    TransBody   = transform_seq(TryBody),
+    TransRescue = [{rescue_clause, RL, Pat, transform_seq(RBody)}
+                   || {rescue_clause, RL, Pat, RBody} <- RescueClauses],
+    {try_expr, Line, TransBody, TransRescue};
 
 %% Leaf nodes — no transformation needed.
 transform_expr(Leaf) ->

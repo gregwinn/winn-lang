@@ -36,13 +36,15 @@ parse_block_multi_params_test() ->
 
 transform_block_call_test() ->
     Src = "module M def f(list) Enum.map(list) do |x| x end end end",
-    [{module,_,'M',[{function,_,f,_,[Expr]}]}] = transform(Src),
-    %% Should be a dot_call with a block as last argument
+    [{module,_,'M',[{function,_,f,_,[OuterCase]}]}] = transform(Src),
+    %% Body is case-wrapped; inner expression is the dot_call with block
+    {case_expr, _, _, [{case_clause, _, _, _, [Expr]}]} = OuterCase,
     ?assertMatch({dot_call, _, 'Enum', map, [{var,_,list}, {block,_,[{var,_,x}],[{var,_,x}]}]}, Expr).
 
 transform_pipe_block_test() ->
     Src = "module M def f(list) list |> Enum.map() do |x| x * 2 end end end",
-    [{module,_,'M',[{function,_,f,_,[Expr]}]}] = transform(Src),
+    [{module,_,'M',[{function,_,f,_,[OuterCase]}]}] = transform(Src),
+    {case_expr, _, _, [{case_clause, _, _, _, [Expr]}]} = OuterCase,
     ?assertMatch({dot_call, _, 'Enum', map, [{var,_,list}, {block,_,_,_}]}, Expr).
 
 %% ── End-to-end tests ─────────────────────────────────────────────────────

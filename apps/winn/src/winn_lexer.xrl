@@ -43,6 +43,9 @@ if                          : {token, {'if', TokenLine}}.
 else                        : {token, {'else', TokenLine}}.
 unless                      : {token, {'unless', TokenLine}}.
 when                        : {token, {'when', TokenLine}}.
+switch                      : {token, {'switch', TokenLine}}.
+try                         : {token, {'try', TokenLine}}.
+rescue                      : {token, {'rescue', TokenLine}}.
 and                         : {token, {'and', TokenLine}}.
 or                          : {token, {'or', TokenLine}}.
 not                         : {token, {'not', TokenLine}}.

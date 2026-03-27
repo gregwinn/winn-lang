@@ -45,10 +45,14 @@ gen_param({pat_wildcard, _})     -> cerl:c_var('_');
 gen_param({pat_var, _, Name})    -> cerl:c_var(var_atom(Name)).  %% defensive
 
 %% Sequence of expressions; last one is the return value.
+%% Assignments scope over the rest of the body via let bindings.
 gen_body([]) ->
     cerl:c_atom(nil);
 gen_body([Single]) ->
     gen_expr(Single);
+gen_body([{assign, _Line, {var, _, VName}, Expr} | Rest]) ->
+    Var = cerl:c_var(var_atom(VName)),
+    cerl:c_let([Var], gen_expr(Expr), gen_body(Rest));
 gen_body([First | Rest]) ->
     cerl:c_seq(gen_expr(First), gen_body(Rest)).
 
@@ -126,18 +130,57 @@ gen_expr({block, _Line, Params, Body}) ->
     BodyExpr  = gen_body(Body),
     cerl:c_fun(ParamVars, BodyExpr);
 
+%% try/rescue expression (L4)
+gen_expr({try_expr, _Line, Body, RescueClauses}) ->
+    CerlBody = gen_body(Body),
+    %% Bind the success value to a fresh variable and return it.
+    SuccessVar = cerl:c_var('_try_val'),
+    %% Build catch clauses from rescue clauses.
+    %% Erlang try/catch receives {Class, Reason, Stacktrace}.
+    ExcClass = cerl:c_var('_exc_class'),
+    ExcVal   = cerl:c_var('_exc_val'),
+    ExcTrace = cerl:c_var('_exc_trace'),
+    CatchClauses = [gen_rescue_clause(RC) || RC <- RescueClauses],
+    %% Add a catch-all rethrow clause at the end.
+    RethrowPat   = cerl:c_tuple([ExcClass, ExcVal, ExcTrace]),
+    RethrowBody  = cerl:c_primop(
+        cerl:c_atom(raise),
+        [ExcTrace, ExcVal]),
+    RethrowClause = cerl:c_clause([RethrowPat], cerl:c_atom(true), RethrowBody),
+    AllCatchClauses = CatchClauses ++ [RethrowClause],
+    CatchVar = cerl:c_var('_catch_reason'),
+    CatchCase = cerl:c_case(CatchVar, AllCatchClauses),
+    cerl:c_try(CerlBody, [SuccessVar], SuccessVar,
+               [ExcClass, ExcVal, ExcTrace],
+               cerl:c_let([CatchVar],
+                          cerl:c_tuple([ExcClass, ExcVal, ExcTrace]),
+                          CatchCase));
+
 gen_expr(Unknown) ->
     error({unsupported_ast_node, Unknown}).
 
 %% ── Case clauses ───────────────────────────────────────────────────────────
 
-gen_case_clause({case_clause, _Line, Patterns, _Guard, Body}) ->
-    %% Patterns is a list (one element per scrutinee component).
+gen_case_clause({case_clause, _Line, Patterns, Guard, Body}) ->
     CerlPats  = [gen_pattern(P) || P <- Patterns],
-    %% No guards in Phase 2 — always true.
-    CerlGuard = cerl:c_atom(true),
+    CerlGuard = case Guard of
+        none -> cerl:c_atom(true);
+        _    -> gen_expr(Guard)
+    end,
     CerlBody  = gen_body(Body),
     cerl:c_clause(CerlPats, CerlGuard, CerlBody).
+
+%% ── Rescue clauses (try/rescue) ──────────────────────────────────────────
+%%
+%% Each rescue clause pattern matches the catch tuple {Class, Reason, Trace}.
+%% We match on the Reason component; Class defaults to 'throw'.
+
+gen_rescue_clause({rescue_clause, _Line, Pat, Body}) ->
+    ExcClass = cerl:c_var('_exc_class'),
+    ExcTrace = cerl:c_var('_exc_trace'),
+    CerlPat  = cerl:c_tuple([ExcClass, gen_pattern(Pat), ExcTrace]),
+    CerlBody = gen_body(Body),
+    cerl:c_clause([CerlPat], cerl:c_atom(true), CerlBody).
 
 %% ── Patterns ───────────────────────────────────────────────────────────────
 %%
