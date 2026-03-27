@@ -7,6 +7,8 @@
 %% ── Entry point ───────────────────────────────────────────────────────────
 
 main(Args) ->
+    %% Enable color output when running in a terminal.
+    winn_errors:set_color(is_tty()),
     case parse_args(Args) of
         {new, Name} ->
             case scaffold(Name) of
@@ -141,13 +143,8 @@ gitignore_content() ->
 %% ── Internal helpers ──────────────────────────────────────────────────────
 
 compile_one(File, OutDir) ->
-    case winn:compile_file(File, OutDir) of
-        {ok, BeamFiles} ->
-            {ok, BeamFiles};
-        {error, Reason} ->
-            io:format("Error compiling ~s: ~p~n", [File, Reason]),
-            {error, Reason}
-    end.
+    %% Errors are already formatted and printed by winn:compile_file.
+    winn:compile_file(File, OutDir).
 
 ensure_dir(Dir) ->
     case file:make_dir(Dir) of
@@ -160,6 +157,12 @@ cleanup_dir(Dir) ->
     Beams = filelib:wildcard(Dir ++ "/*.beam"),
     [file:delete(B) || B <- Beams],
     file:del_dir(Dir).
+
+is_tty() ->
+    case io:columns() of
+        {ok, _} -> true;
+        _       -> false
+    end.
 
 print_usage() ->
     io:format(
