@@ -1,0 +1,44 @@
+module ControlFlow
+  def grade(score) when score >= 90
+    "A"
+  end
+
+  def grade(score) when score >= 80
+    "B"
+  end
+
+  def grade(score) when score >= 70
+    "C"
+  end
+
+  def grade(_)
+    "F"
+  end
+
+  def http_status(code)
+    switch code
+      200 => "OK"
+      201 => "Created"
+      400 => "Bad Request"
+      404 => "Not Found"
+      500 => "Internal Server Error"
+      _   => "Unknown"
+    end
+  end
+
+  def safe_divide(a, b)
+    try
+      a / b
+    rescue
+      _ => {:error, "division failed"}
+    end
+  end
+
+  def main()
+    IO.puts("Grade for 85: " <> grade(85))
+    IO.puts("Status 404: " <> http_status(404))
+
+    result = safe_divide(10, 2)
+    IO.inspect(result)
+  end
+end

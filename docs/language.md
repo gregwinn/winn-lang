@@ -276,6 +276,128 @@ list
   |> Enum.map()    do |x| x * 10 end
 ```
 
+## Control Flow
+
+### if/else
+
+`if/else` is an expression — it returns a value.
+
+```winn
+if x > 0
+  :positive
+else
+  :non_positive
+end
+```
+
+`else` is optional:
+
+```winn
+if debug
+  IO.puts("debug mode")
+end
+```
+
+Use as an expression:
+
+```winn
+label = if count > 100
+  "many"
+else
+  "few"
+end
+```
+
+### switch
+
+Multi-branch matching on a value:
+
+```winn
+switch status
+  :active   => "Active"
+  :inactive => "Inactive"
+  _         => "Unknown"
+end
+```
+
+Switch clauses support any pattern — atoms, integers, tuples, wildcards:
+
+```winn
+switch code
+  200 => :ok
+  404 => :not_found
+  500 => :server_error
+  _   => :unknown
+end
+```
+
+### Guards
+
+Use `when` to add conditions to function clauses and switch branches:
+
+```winn
+def divide(a, b) when b != 0
+  a / b
+end
+
+def divide(_, 0)
+  {:error, "division by zero"}
+end
+```
+
+Guards on switch clauses:
+
+```winn
+switch value
+  n when n > 0  => :positive
+  n when n < 0  => :negative
+  _             => :zero
+end
+```
+
+Multiple guarded clauses are matched top-to-bottom:
+
+```winn
+def grade(score) when score >= 90
+  :a
+end
+
+def grade(score) when score >= 80
+  :b
+end
+
+def grade(score) when score >= 70
+  :c
+end
+
+def grade(_)
+  :f
+end
+```
+
+### try/rescue
+
+Handle exceptions with `try/rescue`:
+
+```winn
+try
+  risky_operation()
+rescue
+  {:error, reason} => IO.puts("caught: " <> reason)
+  _                => IO.puts("unknown error")
+end
+```
+
+`try` is an expression — the last evaluated value is returned:
+
+```winn
+result = try
+  dangerous_call()
+rescue
+  _ => :fallback_value
+end
+```
+
 ## Module Calls
 
 Call functions on other modules with `.` notation:
@@ -284,6 +406,9 @@ Call functions on other modules with `.` notation:
 IO.puts("Hello")
 String.upcase(name)
 Enum.map(list) do |x| x * 2 end
+HTTP.get("https://api.example.com/data")
+JWT.sign(%{user_id: 42}, secret)
+Logger.info("request processed", %{duration_ms: 150})
 ```
 
 ## Comments

@@ -1,0 +1,29 @@
+module PatternMatching
+  def describe({:ok, value})
+    "Success: " <> value
+  end
+
+  def describe({:error, reason})
+    "Error: " <> reason
+  end
+
+  def classify(n) when n > 0
+    :positive
+  end
+
+  def classify(n) when n < 0
+    :negative
+  end
+
+  def classify(0)
+    :zero
+  end
+
+  def main()
+    IO.puts(describe({:ok, "hello"}))
+    IO.puts(describe({:error, "not found"}))
+
+    result = classify(42)
+    IO.inspect(result)
+  end
+end
