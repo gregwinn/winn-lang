@@ -1,0 +1,8 @@
+{application, winn, [
+    {description, "The Winn programming language compiler"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {applications, [kernel, stdlib, compiler]},
+    {env, []},
+    {modules, []}
+]}.

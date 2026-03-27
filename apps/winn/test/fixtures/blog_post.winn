@@ -1,0 +1,17 @@
+# Blog post example — demonstrates pipe operator and module calls.
+# This is the target syntax for Phase 2+.
+
+module Blog
+
+  def create(params)
+    params
+      |> Post.new()
+      |> save()
+      |> Repo.insert()
+  end
+
+  def greet(name)
+    IO.puts("Hello, " <> name <> "!")
+  end
+
+end

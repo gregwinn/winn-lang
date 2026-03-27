@@ -1,0 +1,7 @@
+module Hello
+
+  def main()
+    IO.puts("Hello, World!")
+  end
+
+end

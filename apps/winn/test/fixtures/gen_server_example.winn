@@ -1,0 +1,19 @@
+# Counter GenServer — target syntax for Phase 4 OTP integration.
+
+module Counter
+
+  use Winn.GenServer
+
+  def init(initial)
+    {:ok, initial}
+  end
+
+  def handle_call(:get, state)
+    {:reply, state, state}
+  end
+
+  def handle_cast({:inc, n}, state)
+    {:noreply, state + n}
+  end
+
+end
