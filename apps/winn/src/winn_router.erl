@@ -1,9 +1,12 @@
 %% winn_router.erl
 %% Cowboy handler that dispatches HTTP requests to Winn router modules.
 %%
-%% A Winn router module defines routes/0 returning a list of
-%% {Method, PathPattern, HandlerFun} tuples, plus handler functions
-%% that take a conn map and return a conn map.
+%% A Winn router module defines:
+%%   routes/0      -> [{Method, PathPattern, HandlerFun}]
+%%   middleware/0  -> [MiddlewareFunName]  (optional)
+%%
+%% Each handler takes a conn map and returns a conn map.
+%% Each middleware takes (conn, next) where next is a fun(conn) -> conn.
 
 -module(winn_router).
 -behaviour(cowboy_handler).
@@ -25,7 +28,10 @@ init(Req, #{router := RouterModule} = State) ->
                 query_params => QsParams,
                 body_params  => nil
             },
-            ResultConn = RouterModule:HandlerFun(Conn),
+            %% Build middleware chain with handler at the end.
+            Handler = fun(C) -> RouterModule:HandlerFun(C) end,
+            Chain = build_chain(RouterModule, Handler),
+            ResultConn = Chain(Conn),
             FinalReq = maps:get(req, ResultConn, Req),
             {ok, FinalReq, State};
         nomatch ->
@@ -34,6 +40,27 @@ init(Req, #{router := RouterModule} = State) ->
                 jsone:encode(#{<<"error">> => <<"not found">>}), Req),
             {ok, Req2, State}
     end.
+
+%% ── Middleware chain ────────────────────────────────────────────────────
+
+%% Build a chain of middleware funs wrapping the handler.
+%% If the router exports middleware/0, use it; otherwise just the handler.
+build_chain(RouterModule, Handler) ->
+    case erlang:function_exported(RouterModule, middleware, 0) of
+        true ->
+            MiddlewareNames = RouterModule:middleware(),
+            build_chain_from_list(RouterModule, MiddlewareNames, Handler);
+        false ->
+            Handler
+    end.
+
+%% Fold middleware list right-to-left: last middleware wraps the handler,
+%% first middleware is the outermost.
+build_chain_from_list(_RouterModule, [], Handler) ->
+    Handler;
+build_chain_from_list(RouterModule, [MwName | Rest], Handler) ->
+    Inner = build_chain_from_list(RouterModule, Rest, Handler),
+    fun(Conn) -> RouterModule:MwName(Conn, Inner) end.
 
 %% ── Route matching ──────────────────────────────────────────────────────
 
@@ -47,9 +74,6 @@ match_route(Method, Path, [{Method, Pattern, Handler} | Rest]) ->
 match_route(Method, Path, [_ | Rest]) ->
     match_route(Method, Path, Rest).
 
-%% Match a route pattern against a request path.
-%% Pattern: <<"/users/:id">>  Path: <<"/users/42">>
-%% Returns {ok, #{<<"id">> => <<"42">>}} or nomatch.
 match_path(Pattern, Path) when is_binary(Pattern), is_binary(Path) ->
     PatSegs  = split_path(Pattern),
     PathSegs = split_path(Path),

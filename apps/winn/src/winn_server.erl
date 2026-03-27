@@ -24,6 +24,7 @@
 -export([json/2, json/3, text/2, text/3, send/4]).
 -export([body_params/1, path_param/2, query_param/2, header/2]).
 -export([method/1, path/1]).
+-export([set_header/3]).
 
 -define(LISTENER, winn_http_listener).
 
@@ -102,6 +103,12 @@ header(_, _) ->
 
 method(#{method := M}) -> M.
 path(#{path := P})     -> P.
+
+%% Set a response header on the conn. Headers are applied when the response is sent.
+%% Stores pending headers in the conn map; json/text/send will include them.
+set_header(#{req := Req0} = Conn, Name, Value) when is_binary(Name), is_binary(Value) ->
+    Req1 = cowboy_req:set_resp_header(Name, Value, Req0),
+    Conn#{req := Req1}.
 
 %% ── JSON encoding helpers ───────────────────────────────────────────────
 
