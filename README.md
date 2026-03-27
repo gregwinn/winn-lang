@@ -214,9 +214,10 @@ language-winn/
 
 ## Documentation
 
+- **[Getting Started](docs/getting-started.md)** — install, create a project, build, and run
 - [Language Guide](docs/language.md) — syntax, control flow, pattern matching
 - [Standard Library](docs/stdlib.md) — IO, String, Enum, List, Map, System, UUID, DateTime, Logger, Crypto
 - [OTP Integration](docs/otp.md) — GenServer, Supervisor, Application
 - [ORM](docs/orm.md) — Schema, Repo, Changeset
-- [Modules](docs/modules.md) — HTTP, JWT, WebSockets, Tasks, Config
-- [CLI](docs/cli.md) — CLI commands
+- [Modules](docs/modules.md) — HTTP server/client, JWT, WebSockets, Tasks, Config
+- [CLI Reference](docs/cli.md) — all CLI commands

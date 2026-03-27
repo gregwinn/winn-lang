@@ -1,26 +1,32 @@
 # Winn CLI
 
-The `winn` command-line tool provides commands for creating, compiling, and running Winn programs.
+The `winn` command-line tool creates, compiles, and runs Winn programs.
 
 ## Installation
 
-Build the escript binary:
+### Homebrew (recommended)
 
 ```sh
+brew tap gregwinn/winn
+brew install winn
+```
+
+### From Source
+
+```sh
+git clone https://github.com/gregwinn/winn-lang.git
+cd winn-lang
 rebar3 escriptize
+cp _build/default/bin/winn /usr/local/bin/
 ```
 
-This produces `./_build/default/bin/winn`. Add it to your PATH:
-
-```sh
-export PATH="$PATH:/path/to/language-winn/_build/default/bin"
-```
+---
 
 ## Commands
 
 ### `winn new <name>`
 
-Scaffold a new Winn project.
+Create a new Winn project with the standard directory structure.
 
 ```sh
 winn new my_app
@@ -30,10 +36,10 @@ Creates:
 
 ```
 my_app/
-├── rebar.config
-├── .gitignore
+├── rebar.config       # Erlang build configuration
+├── .gitignore         # Ignores _build/, ebin/, *.beam
 └── src/
-    └── my_app.winn
+    └── my_app.winn    # Starter module with main()
 ```
 
 The generated `src/my_app.winn`:
@@ -46,33 +52,73 @@ module MyApp
 end
 ```
 
+The generated `rebar.config`:
+
+```erlang
+{erl_opts, [debug_info]}.
+{deps, []}.
+```
+
 ---
 
-### `winn compile [file_or_dir]`
+### `winn compile [file]`
 
-Compile `.winn` files to `.beam` bytecode in `ebin/`.
+Compile `.winn` files to `.beam` bytecode.
 
 ```sh
-# Compile a single file
+# Compile a single file — output to ebin/
 winn compile src/my_app.winn
 
-# Compile all .winn files in src/
+# Compile all .winn files in the current directory
 winn compile
 ```
 
-Output `.beam` files are written to `ebin/`.
+Output `.beam` files are written to `ebin/`. The directory is created automatically if it doesn't exist.
+
+**What happens during compilation:**
+
+1. Lexer tokenizes the source (`.winn` → tokens)
+2. Parser builds the AST (tokens → syntax tree)
+3. Semantic analysis checks scope and variables
+4. Transform desugars pipes, match blocks, closures, schemas
+5. Codegen produces Core Erlang via the `cerl` module
+6. Core Erlang is compiled to `.beam` bytecode
+
+**Error output:**
+
+If compilation fails, you get a structured error message pointing to the issue:
+
+```
+-- Syntax Error ----------------------------- src/app.winn --
+
+3 |     x +
+4 |   end
+  |   ^^^
+5 | end
+  Unexpected 'end'.
+  Hint: Did you close a block too early, or forget an expression?
+```
+
+Errors are printed to stderr. The exit code is 1 on failure, 0 on success.
 
 ---
 
 ### `winn run <file>`
 
-Compile and immediately run a Winn file. Calls `Module:main()`.
+Compile a `.winn` file and immediately run it by calling `Module:main()`.
 
 ```sh
-winn run hello.winn
+winn run src/hello.winn
 ```
 
-The module name is derived from the filename (`hello.winn` → module `hello`). If the module defines `main/0` it is called automatically.
+How it works:
+
+1. Compiles the file to a temporary directory
+2. Loads the `.beam` into the running Erlang VM
+3. Calls `module_name:main()` (falls back to `main/1` with `[]`)
+4. Cleans up the temp directory
+
+The module name is derived from the filename: `hello.winn` → calls `hello:main()`.
 
 ---
 
@@ -84,14 +130,66 @@ Print usage information.
 winn help
 ```
 
-## Erlang API
+---
 
-You can also drive the compiler from Erlang/the rebar3 shell:
+## Running Compiled Modules
+
+After compiling with `winn compile`, run your BEAM files with Erlang directly:
+
+```sh
+# Simple — just your compiled code
+erl -pa ebin -noshell -eval 'my_app:main(), halt().'
+
+# With dependencies (HTTP server, etc.)
+erl -pa ebin -pa _build/default/lib/*/ebin -noshell -eval 'my_app:main().'
+```
+
+---
+
+## Typical Workflow
+
+```sh
+# 1. Create a new project
+winn new my_app
+cd my_app
+
+# 2. Edit your source files
+#    (use VS Code with the Winn extension for syntax highlighting)
+
+# 3. Compile
+winn compile src/my_app.winn
+
+# 4. Run
+winn run src/my_app.winn
+
+# Or compile all and run with Erlang
+winn compile
+erl -pa ebin -noshell -eval 'my_app:main(), halt().'
+```
+
+---
+
+## Programmatic API
+
+You can also drive the Winn compiler from Erlang code or the rebar3 shell:
 
 ```erlang
-%% Compile a file, write .beam to a directory
+%% Compile a file to a directory
 winn:compile_file("src/hello.winn", "ebin").
 
-%% Compile a string directly
-winn:compile_string("Hello", "def main() IO.puts(\"hi\") end", "ebin").
+%% Compile a string (useful for testing)
+winn:compile_string(
+  "module Test\n  def main()\n    IO.puts(\"hi\")\n  end\nend",
+  "test.winn",
+  "ebin"
+).
 ```
+
+---
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Compilation error, runtime error, or unknown command |
