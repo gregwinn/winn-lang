@@ -313,9 +313,39 @@ decoded = Crypto.base64_decode(encoded)
 
 ---
 
+## JSON
+
+### `JSON.encode(term)`
+Encode a map, list, or value to a JSON binary string. Atom keys are converted to strings.
+```winn
+JSON.encode(%{name: "Alice", age: 30})
+# => "{\"name\":\"Alice\",\"age\":30}"
+```
+
+### `JSON.decode(binary)`
+Decode a JSON binary string to a map with atom keys.
+```winn
+data = JSON.decode("{\"name\":\"Bob\",\"count\":5}")
+data.name   # => "Bob"
+data.count  # => 5
+```
+
+---
+
 ## Type Conversions
 
-These are global functions (no module prefix needed from Erlang; in Winn call via the runtime):
+These are available as bare function calls anywhere in Winn code:
+
+```winn
+to_string(42)        # => "42"
+to_string(:hello)    # => "hello"
+to_integer("123")    # => 123
+to_float(5)          # => 5.0
+to_atom("hello")     # => :hello
+inspect({:ok, 42})   # => "{ok,42}"
+```
+
+Also available via module prefix:
 
 - `String.to_integer(str)` — parse integer
 - `String.to_float(str)` — parse float

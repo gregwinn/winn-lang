@@ -5,20 +5,26 @@ Winn is a Ruby/Elixir-inspired language that compiles to the BEAM (Erlang VM). I
 ## Features
 
 - **Clean syntax** — `module`, `def`, `end` keywords; no noise
+- **String interpolation** — `"Hello, #{name}!"`
 - **Pipe operator** — `|>` for composable data transformations
-- **Pattern matching** — multi-clause functions and `match...end` blocks
-- **Closures** — `do |x| ... end` blocks passed to iterators
-- **Control flow** — `if/else`, `switch`, guards (`when`), `try/rescue`
+- **Pattern matching** — multi-clause functions, `match...end` blocks, destructuring assignment
+- **Closures** — `do |x| ... end` blocks and standalone `fn(x) => expr end` lambdas
+- **Control flow** — `if/else`, `switch` (with multi-line `do...end` bodies), guards (`when`), `try/rescue`
+- **For comprehensions** — `for x in 1..10 do x * 2 end`
+- **Range literals** — `1..100`
+- **Map field access** — `user.name` instead of `Map.get(:name, user)`
 - **OTP integration** — `use Winn.GenServer` / `use Winn.Supervisor` / `use Winn.Application`
 - **Built-in ORM** — schema DSL, changesets, Repo, PostgreSQL via epgsql
-- **HTTP server** — Cowboy-powered with route matching, JSON responses, path/query params
+- **HTTP server** — Cowboy-powered with routing, middleware, JSON responses
 - **HTTP client** — `HTTP.get/post/put/patch/delete` with auto JSON
 - **JWT** — pure Erlang HS256 sign/verify
 - **WebSockets** — client via gun (`WS.connect/send/recv/close`)
 - **Async tasks** — `Task.async/await/async_all` for easy concurrency
 - **Structured logging** — `Logger.info/warn/error/debug` with JSON output
 - **Crypto** — hashing, HMAC, random bytes, base64
+- **JSON** — `JSON.encode/decode`
 - **Config** — ETS-backed config with `Config.get/put/load`
+- **Clear error messages** — source context, caret pointers, hints
 - **Compiles to BEAM** — runs on the battle-tested Erlang virtual machine
 
 ## Install
@@ -30,50 +36,37 @@ brew tap gregwinn/winn
 brew install winn
 ```
 
-This installs the `winn` CLI to your PATH. Requires Erlang/OTP 28+ (installed automatically by Homebrew if needed).
-
-### Upgrade
-
-```sh
-brew upgrade winn
-```
-
-### Uninstall
-
-```sh
-brew uninstall winn
-brew untap gregwinn/winn
-```
+Requires Erlang/OTP 28+ (installed automatically by Homebrew if needed).
 
 ### From Source
-
-If you prefer to build from source:
 
 ```sh
 git clone https://github.com/gregwinn/winn-lang.git
 cd winn-lang
 rebar3 escriptize
-```
-
-The `winn` binary is at `./_build/default/bin/winn`. Add it to your PATH or copy it somewhere in your PATH:
-
-```sh
 cp _build/default/bin/winn /usr/local/bin/
 ```
 
-#### Prerequisites (from source)
-
-- Erlang/OTP 28+
-- rebar3
-
-#### Run Tests
+### Verify
 
 ```sh
-rebar3 eunit
-# => 294 tests, 0 failures
+winn version
+# => winn 0.2.0
 ```
 
 ## Quick Start
+
+```sh
+# Create a new project
+winn new my_app
+cd my_app
+
+# Run it
+winn run src/my_app.winn
+
+# Or compile and start (keeps VM alive for servers)
+winn start
+```
 
 ### Hello World
 
@@ -82,24 +75,15 @@ Create `hello.winn`:
 ```winn
 module Hello
   def main()
-    IO.puts("Hello, World!")
+    name = "World"
+    IO.puts("Hello, #{name}!")
   end
 end
 ```
 
-Compile and run:
-
 ```sh
-./_build/default/bin/winn run hello.winn
-```
-
-Or from the rebar3 shell:
-
-```sh
-rebar3 shell
-> winn:compile_file("hello.winn", "/tmp").
-> hello:main().
-Hello, World!
+winn run hello.winn
+# => Hello, World!
 ```
 
 ## Language Overview
@@ -107,7 +91,7 @@ Hello, World!
 ```winn
 module Greeter
   def greet(name)
-    "Hello, " <> name <> "!"
+    "Hello, #{name}!"
   end
 
   def greet(:world)
@@ -118,10 +102,12 @@ end
 
 ```winn
 module Pipeline
-  def process(list)
-    list
-      |> Enum.filter() do |x| x > 0 end
-      |> Enum.map()    do |x| x * 2 end
+  def main()
+    1..10
+      |> Enum.filter() do |x| x > 5 end
+      |> Enum.map() do |x| x * 100 end
+      |> Enum.join(", ")
+      |> IO.puts()
   end
 end
 ```
@@ -129,50 +115,46 @@ end
 ```winn
 module Example
   def classify(n)
-    if n > 0
-      :positive
-    else
-      switch n
-        0 => :zero
-        _ => :negative
-      end
+    switch n
+      x when x > 0 => :positive
+      x when x < 0 => :negative
+      _             => :zero
     end
   end
 
-  def safe_divide(a, b) when b != 0
-    a / b
-  end
+  def main()
+    {:ok, data} = fetch_data()
 
-  def safe_divide(_, 0)
-    {:error, "division by zero"}
+    results = for item in data do
+      item.name
+    end
+
+    doubled = fn(x) => x * 2 end
+    IO.puts("#{to_string(doubled(21))}")
   end
 end
 ```
 
 ```winn
-module WebService
-  def fetch_user(id)
-    try
-      HTTP.get("https://api.example.com/users/" <> id)
-    rescue
-      _ => {:error, :network_failure}
-    end
+module Api
+  use Winn.Router
+
+  def routes()
+    [{:get, "/users/:id", :get_user}]
   end
 
-  def create_token(user_id)
-    secret = System.get_env("JWT_SECRET")
-    JWT.sign(%{user_id: user_id}, secret)
+  def middleware()
+    [:log_request]
   end
-end
-```
 
-```winn
-module Post
-  use Winn.Schema
+  def log_request(conn, next)
+    Logger.info("#{Server.method(conn)} #{Server.path(conn)}")
+    next(conn)
+  end
 
-  schema "posts" do
-    field :title, :string
-    field :body,  :text
+  def get_user(conn)
+    id = Server.path_param(conn, "id")
+    Server.json(conn, %{id: id})
   end
 end
 ```
@@ -188,11 +170,13 @@ language-winn/
 │   ├── winn_semantic.erl    # scope analysis
 │   ├── winn_codegen.erl     # Core Erlang code generation
 │   ├── winn_core_emit.erl   # Core Erlang -> .beam
+│   ├── winn_errors.erl      # human-readable compiler error formatting
 │   ├── winn_runtime.erl     # stdlib (IO, String, Enum, List, Map, System, UUID, DateTime)
 │   ├── winn_logger.erl      # structured JSON logging
 │   ├── winn_crypto.erl      # hashing, HMAC, base64
+│   ├── winn_json.erl        # JSON encode/decode
 │   ├── winn_server.erl      # HTTP server runtime (cowboy)
-│   ├── winn_router.erl      # HTTP route matching + dispatch
+│   ├── winn_router.erl      # HTTP route matching, dispatch, middleware
 │   ├── winn_http.erl        # HTTP client (hackney + jsone)
 │   ├── winn_jwt.erl         # JWT sign/verify (pure Erlang HS256)
 │   ├── winn_task.erl        # async/await concurrency
@@ -200,24 +184,29 @@ language-winn/
 │   ├── winn_config.erl      # ETS-backed configuration
 │   ├── winn_repo.erl        # ORM database layer
 │   ├── winn_changeset.erl   # changeset validation
-│   ├── winn_cli.erl         # CLI escript (new/compile/run/help)
+│   ├── winn_cli.erl         # CLI escript (new/compile/run/start/version/help)
 │   └── winn.erl             # public API
-├── apps/winn/test/           # 238 tests across 20 test files
+├── apps/winn/test/           # 294 tests across 22 test files
 └── docs/
+    ├── getting-started.md    # install, create, build, run
     ├── language.md           # syntax reference
     ├── stdlib.md             # standard library
     ├── otp.md                # GenServer / Supervisor / Application
     ├── orm.md                # Schema / Repo / Changeset
-    ├── modules.md            # HTTP, JWT, WebSockets, Tasks, Config
+    ├── modules.md            # HTTP server/client, JWT, WebSockets, Tasks, Config
     └── cli.md                # CLI commands
 ```
 
 ## Documentation
 
 - **[Getting Started](docs/getting-started.md)** — install, create a project, build, and run
-- [Language Guide](docs/language.md) — syntax, control flow, pattern matching
-- [Standard Library](docs/stdlib.md) — IO, String, Enum, List, Map, System, UUID, DateTime, Logger, Crypto
+- [Language Guide](docs/language.md) — syntax, control flow, pattern matching, interpolation, lambdas, ranges
+- [Standard Library](docs/stdlib.md) — IO, String, Enum, List, Map, System, UUID, DateTime, Logger, Crypto, JSON
 - [OTP Integration](docs/otp.md) — GenServer, Supervisor, Application
 - [ORM](docs/orm.md) — Schema, Repo, Changeset
 - [Modules](docs/modules.md) — HTTP server/client, JWT, WebSockets, Tasks, Config
 - [CLI Reference](docs/cli.md) — all CLI commands
+
+## Editor Support
+
+- [VS Code extension](https://github.com/gregwinn/language-winn-vscode) — syntax highlighting + compile-on-save diagnostics
