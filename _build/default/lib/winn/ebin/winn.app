@@ -5,6 +5,7 @@
               {applications,[kernel,stdlib,compiler]},
               {env,[]},
               {modules,[winn,winn_ast,winn_changeset,winn_cli,winn_codegen,
-                        winn_core_emit,winn_crypto,winn_lexer,winn_logger,
-                        winn_parser,winn_repo,winn_runtime,winn_semantic,
-                        winn_transform]}]}.
+                        winn_config,winn_core_emit,winn_crypto,winn_http,
+                        winn_jwt,winn_lexer,winn_logger,winn_parser,winn_repo,
+                        winn_runtime,winn_semantic,winn_task,winn_transform,
+                        winn_ws]}]}.

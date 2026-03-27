@@ -268,6 +268,7 @@ resolve_dot_call('Config', Fun)  -> {winn_config, Fun};
 resolve_dot_call('Task', Fun)    -> {winn_task, Fun};
 resolve_dot_call('JWT', Fun)     -> {winn_jwt, Fun};
 resolve_dot_call('WS', Fun)      -> {winn_ws, Fun};
+resolve_dot_call('Server', Fun)  -> {winn_server, Fun};
 resolve_dot_call(Mod, Fun) ->
     ErlMod = list_to_atom(string:lowercase(atom_to_list(Mod))),
     {ErlMod, Fun}.

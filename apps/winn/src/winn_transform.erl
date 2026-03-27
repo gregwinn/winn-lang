@@ -71,6 +71,9 @@ expand_use(Line, 'Winn', 'Supervisor', ModName) ->
             {var, Line, args}
         ]}]},
     {behaviour, Attr, StartLink};
+expand_use(Line, 'Winn', 'Router', _ModName) ->
+    Attr = {behaviour_attr, Line, winn_router},
+    {behaviour_only, Attr};
 expand_use(Line, 'Winn', 'Application', _ModName) ->
     Attr = {behaviour_attr, Line, application},
     {behaviour_only, Attr};

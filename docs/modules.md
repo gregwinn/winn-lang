@@ -4,6 +4,142 @@ Higher-level modules for building web services, APIs, and concurrent application
 
 ---
 
+## HTTP Server
+
+Built-in HTTP server powered by [Cowboy](https://github.com/ninenines/cowboy). Define routes and handlers in a Winn module.
+
+### Defining a Router
+
+```winn
+module MyApp.Router
+  use Winn.Router
+
+  def routes()
+    [
+      {:get, "/", :index},
+      {:get, "/users", :list_users},
+      {:post, "/users", :create_user},
+      {:get, "/users/:id", :get_user}
+    ]
+  end
+
+  def index(conn)
+    Server.json(conn, %{message: "Welcome to MyApp"})
+  end
+
+  def list_users(conn)
+    match Repo.all(User)
+      ok users => Server.json(conn, users)
+      err reason => Server.json(conn, %{error: reason}, 500)
+    end
+  end
+
+  def create_user(conn)
+    params = Server.body_params(conn)
+    match Repo.insert(User, params)
+      ok user => Server.json(conn, user, 201)
+      err reason => Server.json(conn, %{error: reason}, 422)
+    end
+  end
+
+  def get_user(conn)
+    id = Server.path_param(conn, "id")
+    match Repo.get(User, id)
+      ok user => Server.json(conn, user)
+      err :not_found => Server.json(conn, %{error: "not found"}, 404)
+    end
+  end
+end
+```
+
+### Starting the Server
+
+```winn
+Server.start(MyApp.Router, 4000)
+```
+
+Returns `{:ok, pid}`. The server listens on the given port.
+
+### Stopping the Server
+
+```winn
+Server.stop()
+```
+
+### Response Helpers
+
+#### `Server.json(conn, data)` / `Server.json(conn, data, status)`
+
+Send a JSON response. Maps are automatically encoded. Default status is 200.
+
+```winn
+Server.json(conn, %{name: "Alice"})
+Server.json(conn, %{error: "not found"}, 404)
+```
+
+#### `Server.text(conn, body)` / `Server.text(conn, body, status)`
+
+Send a plain text response.
+
+```winn
+Server.text(conn, "OK")
+Server.text(conn, "Created", 201)
+```
+
+#### `Server.send(conn, status, headers, body)`
+
+Send a raw response with custom headers.
+
+### Request Accessors
+
+#### `Server.body_params(conn)`
+
+Read and JSON-decode the request body. Returns a map.
+
+```winn
+params = Server.body_params(conn)
+name = Map.get(:name, params)
+```
+
+#### `Server.path_param(conn, key)`
+
+Extract a named path parameter. Routes use `:name` syntax for params.
+
+```winn
+# Route: {:get, "/users/:id", :get_user}
+# Request: GET /users/42
+id = Server.path_param(conn, "id")
+# => "42"
+```
+
+#### `Server.query_param(conn, key)`
+
+Extract a query string parameter.
+
+```winn
+# Request: GET /search?q=hello
+q = Server.query_param(conn, "q")
+# => "hello"
+```
+
+#### `Server.header(conn, name)`
+
+Read a request header (lowercase name). Returns `nil` if not present.
+
+```winn
+auth = Server.header(conn, "authorization")
+```
+
+### Route Matching
+
+Routes are matched top-to-bottom by HTTP method and path pattern:
+
+- Literal segments match exactly: `/users` matches `/users`
+- Parameter segments start with `:` and capture the value: `/users/:id` matches `/users/42`
+- Unmatched requests automatically get a 404 JSON response
+
+---
+
 ## HTTP Client
 
 Make HTTP requests with automatic JSON encoding/decoding. Powered by [hackney](https://github.com/benoitc/hackney) and [jsone](https://github.com/sile/jsone).

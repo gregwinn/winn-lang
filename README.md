@@ -11,6 +11,7 @@ Winn is a Ruby/Elixir-inspired language that compiles to the BEAM (Erlang VM). I
 - **Control flow** — `if/else`, `switch`, guards (`when`), `try/rescue`
 - **OTP integration** — `use Winn.GenServer` / `use Winn.Supervisor` / `use Winn.Application`
 - **Built-in ORM** — schema DSL, changesets, Repo, PostgreSQL via epgsql
+- **HTTP server** — Cowboy-powered with route matching, JSON responses, path/query params
 - **HTTP client** — `HTTP.get/post/put/patch/delete` with auto JSON
 - **JWT** — pure Erlang HS256 sign/verify
 - **WebSockets** — client via gun (`WS.connect/send/recv/close`)
@@ -39,7 +40,7 @@ rebar3 compile
 
 ```sh
 rebar3 eunit
-# => 223 tests, 0 failures
+# => 238 tests, 0 failures
 ```
 
 ### Hello World
@@ -158,6 +159,8 @@ language-winn/
 │   ├── winn_runtime.erl     # stdlib (IO, String, Enum, List, Map, System, UUID, DateTime)
 │   ├── winn_logger.erl      # structured JSON logging
 │   ├── winn_crypto.erl      # hashing, HMAC, base64
+│   ├── winn_server.erl      # HTTP server runtime (cowboy)
+│   ├── winn_router.erl      # HTTP route matching + dispatch
 │   ├── winn_http.erl        # HTTP client (hackney + jsone)
 │   ├── winn_jwt.erl         # JWT sign/verify (pure Erlang HS256)
 │   ├── winn_task.erl        # async/await concurrency
@@ -167,7 +170,7 @@ language-winn/
 │   ├── winn_changeset.erl   # changeset validation
 │   ├── winn_cli.erl         # CLI escript (new/compile/run/help)
 │   └── winn.erl             # public API
-├── apps/winn/test/           # 223 tests across 18 test files
+├── apps/winn/test/           # 238 tests across 20 test files
 └── docs/
     ├── language.md           # syntax reference
     ├── stdlib.md             # standard library
