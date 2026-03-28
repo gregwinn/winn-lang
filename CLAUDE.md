@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Workflow Rules
+
+- **Branch per feature.** Every new feature or change must be developed on its own branch off `develop`. Never commit directly to `main` or `develop`. Use descriptive branch names: `feature/repl`, `fix/scaffold-module-name`, `docs/update-cli`.
+- **Document everything.** Every new or updated feature must be documented before merging. Update the relevant docs in `docs/` (language.md, stdlib.md, modules.md, cli.md, getting-started.md) and add a CHANGELOG.md entry. If it changes syntax, update the VS Code grammar in the separate `language-winn-vscode` repo. If it adds a CLI command, update the help text in `winn_cli.erl`.
+
 ## Build & Test Commands
 
 ```sh
