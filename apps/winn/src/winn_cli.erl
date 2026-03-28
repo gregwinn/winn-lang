@@ -35,7 +35,7 @@ main(Args) ->
         {start, ExtraArgs} ->
             start_project(ExtraArgs);
 
-        shell ->
+        console ->
             winn_repl:start(),
             halt(0);
 
@@ -59,8 +59,7 @@ parse_args(["compile"])            -> {compile, []};
 parse_args(["compile", File])      -> {compile, [File]};
 parse_args(["run", File | Args])   -> {run, File, Args};
 parse_args(["start" | Args])       -> {start, Args};
-parse_args(["shell" | _])          -> shell;
-parse_args(["repl" | _])           -> shell;
+parse_args(["console" | _])        -> console;
 parse_args(["version" | _])        -> version;
 parse_args(["-v" | _])             -> version;
 parse_args(["--version" | _])      -> version;
@@ -334,7 +333,7 @@ print_usage() ->
         "  winn run <file>         Compile and run a single .winn file~n"
         "  winn start              Compile project and start (keeps VM alive)~n"
         "  winn start <module>     Start with a specific module~n"
-        "  winn shell              Interactive REPL~n"
+        "  winn console            Interactive console~n"
         "  winn version            Show version~n"
         "  winn help               Show this help text~n",
         [get_version()]
