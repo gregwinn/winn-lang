@@ -39,6 +39,13 @@ main(Args) ->
             winn_repl:start(),
             halt(0);
 
+        {deps, Sub} ->
+            Result = run_deps(Sub),
+            case Result of
+                ok -> halt(0);
+                {error, _} -> halt(1)
+            end;
+
         version ->
             print_version(),
             halt(0);
@@ -60,6 +67,7 @@ parse_args(["compile", File])      -> {compile, [File]};
 parse_args(["run", File | Args])   -> {run, File, Args};
 parse_args(["start" | Args])       -> {start, Args};
 parse_args(["console" | _])        -> console;
+parse_args(["deps" | Sub])         -> {deps, Sub};
 parse_args(["version" | _])        -> version;
 parse_args(["-v" | _])             -> version;
 parse_args(["--version" | _])      -> version;
@@ -300,6 +308,23 @@ cleanup_dir(Dir) ->
     [file:delete(B) || B <- Beams],
     file:del_dir(Dir).
 
+%% ── Deps subcommand ─────────────────────────────────────────────────────
+
+run_deps(["list"])              -> winn_deps:list();
+run_deps(["add", Name, Vsn])   -> winn_deps:add(Name, Vsn);
+run_deps(["remove", Name])     -> winn_deps:remove(Name);
+run_deps(["install"])           -> winn_deps:install();
+run_deps([]) ->
+    io:format("Usage:~n"
+              "  winn deps list              List dependencies~n"
+              "  winn deps add <name> <vsn>  Add a dependency~n"
+              "  winn deps remove <name>     Remove a dependency~n"
+              "  winn deps install           Fetch and compile deps~n"),
+    ok;
+run_deps(_) ->
+    io:format("Unknown deps command. Run `winn deps` for usage.~n"),
+    {error, unknown}.
+
 to_pascal_case(Name) ->
     Parts = string:split(Name, "_", all),
     lists:flatten([capitalize(P) || P <- Parts]).
@@ -333,6 +358,7 @@ print_usage() ->
         "  winn run <file>         Compile and run a single .winn file~n"
         "  winn start              Compile project and start (keeps VM alive)~n"
         "  winn start <module>     Start with a specific module~n"
+        "  winn deps               Manage dependencies~n"
         "  winn console            Interactive console~n"
         "  winn version            Show version~n"
         "  winn help               Show this help text~n",
