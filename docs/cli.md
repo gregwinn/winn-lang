@@ -144,6 +144,28 @@ Use `winn start` for:
 
 ---
 
+### `winn deps`
+
+Manage project dependencies.
+
+```sh
+# List current dependencies
+winn deps list
+
+# Add a dependency (fetches and compiles automatically)
+winn deps add cowboy 2.12.0
+
+# Remove a dependency
+winn deps remove cowboy
+
+# Fetch and compile all dependencies
+winn deps install
+```
+
+Dependencies are stored in `rebar.config` in standard Erlang format. Under the hood, `winn deps install` runs `rebar3 get-deps && rebar3 compile`.
+
+---
+
 ### `winn version`
 
 Print the version.
