@@ -2,3 +2,6 @@
 .env
 _build/
 rebar.lock
+ebin/
+apps/winn/src/winn_lexer.erl
+apps/winn/src/winn_parser.erl
