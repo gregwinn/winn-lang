@@ -1,697 +1,512 @@
 # Winn Roadmap
 
-Each chunk below is independently buildable — there are no hard ordering requirements unless noted under **Depends on**.
+## Current Status — v0.2.0
+
+294 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
+
+### Completed
+
+| Area | Feature | Version |
+|------|---------|---------|
+| Language | if/else, switch, guards (when), try/rescue | v0.1.0 |
+| Language | String interpolation (`"#{expr}"`), standalone lambdas (`fn => end`) | v0.2.0 |
+| Language | For comprehensions, range literals (`1..10`), pattern assignment | v0.2.0 |
+| Language | Map field access (`user.name`), multi-line switch/rescue bodies | v0.2.0 |
+| Runtime | System (env vars), UUID, DateTime, Logger, Crypto | v0.1.0 |
+| Runtime | JSON module, type builtins (to_string, to_integer, etc.) | v0.2.0 |
+| Modules | HTTP client (hackney), HTTP server (Cowboy), middleware | v0.2.0 |
+| Modules | Config (ETS), Task/Async, JWT (pure Erlang), WebSockets (gun) | v0.1.0 |
+| OTP | GenServer, Supervisor, Application, Task behaviours | v0.1.0 |
+| ORM | Schema DSL, Changeset, Repo (PostgreSQL via epgsql) | v0.1.0 |
+| Tooling | CLI (new/compile/run/start/version), Homebrew formula | v0.2.0 |
+| Tooling | VS Code extension, compiler error messages with source context | v0.2.0 |
 
 ---
 
-## Language Features (Compiler Changes)
+## Next Up — Planned Features
 
-These all touch `winn_lexer.xrl`, `winn_parser.yrl`, `winn_transform.erl`, and `winn_codegen.erl`.
+### N1 — Merge to Main and Stabilize
+
+**Priority:** High
+**Effort:** Small
+
+The `develop` branch is significantly ahead of `main`. Merge, tag properly, and establish a release cadence.
+
+- Merge `develop` into `main`
+- Set up CI (GitHub Actions) running `rebar3 eunit` on push
+- Add a `CHANGELOG.md`
 
 ---
 
-### L1 — if/else
+### N2 — REPL (`winn shell`)
 
-**Goal:** `if/else` as a first-class expression.
+**Priority:** High
+**Effort:** Medium
+
+An interactive Winn session for learning, prototyping, and debugging.
+
+**Syntax:**
+```
+$ winn shell
+Winn 0.2.0 (Erlang/OTP 28)
+
+winn> 1 + 2
+3
+
+winn> name = "Alice"
+"Alice"
+
+winn> "Hello, #{name}!"
+"Hello, Alice!"
+
+winn> Enum.map(1..5) do |x| x * x end
+[1, 4, 9, 16, 25]
+```
+
+**Implementation:**
+- Add `winn shell` command to `winn_cli.erl`
+- Read-eval-print loop: read line → lex → parse → transform → codegen → compile → eval → print
+- Wrap each input in a temporary module, compile in-memory, call, print result
+- Keep variable state across evaluations (accumulate bindings)
+- Support multi-line input (detect incomplete expressions by trailing operators/unclosed blocks)
+- History via Erlang's built-in `io:get_line` or link to `edlin`
+
+---
+
+### N3 — Package/Dependency Management (`winn deps`)
+
+**Priority:** High
+**Effort:** Medium
+
+Install and manage Erlang/Hex dependencies from Winn projects.
+
+**Syntax:**
+```sh
+# Add a dependency
+winn deps add cowboy 2.12.0
+
+# Install all dependencies
+winn deps install
+
+# List dependencies
+winn deps list
+
+# Remove a dependency
+winn deps remove cowboy
+```
+
+**Implementation:**
+- Read/write `rebar.config` deps section programmatically
+- `winn deps install` → runs `rebar3 get-deps && rebar3 compile`
+- `winn deps add <name> <version>` → edits rebar.config, then installs
+- Consider a `winn.toml` or `winn.lock` file for Winn-native config (maps to rebar.config)
+- Future: Winn package registry (like Hex.pm)
+
+---
+
+### N4 — Testing Framework (`winn test`)
+
+**Priority:** High
+**Effort:** Medium
+
+Write and run tests in Winn, not just Erlang.
 
 **Syntax:**
 ```winn
-if x > 0
-  IO.puts("positive")
-else
-  IO.puts("non-positive")
+module UserTest
+  use Winn.Test
+
+  def test_create_user()
+    user = User.new(%{name: "Alice"})
+    assert(user.name == "Alice")
+  end
+
+  def test_validate_required()
+    changeset = Changeset.new(User.new(%{}), %{})
+    changeset = Changeset.validate_required(changeset, [:name])
+    assert(Changeset.valid(changeset) == false)
+  end
 end
+```
 
-result = if user != nil
-  user.name
-else
-  "anonymous"
-end
+```sh
+winn test                    # Run all tests in test/
+winn test test/user_test.winn  # Run a specific test file
 ```
 
 **Implementation:**
-- Lexer: add `if`, `else` tokens (check if already present)
-- Parser: `if_expr -> 'if' expr expr_seq 'else' expr_seq 'end'` and `if_expr -> 'if' expr expr_seq 'end'` (no else)
-- Transform: `{if_expr, Line, Cond, Then, Else}` → `{case_expr, Line, Cond, [true_clause, false_clause]}`
-- Codegen: handled by existing `gen_expr({case_expr,...})`
-
-**Tests:** `winn_l1_tests.erl` — parse, transform, end-to-end (if true, if false, if/else, if as expression)
-
----
-
-### L2 — switch expression
-
-**Goal:** Multi-branch value matching without `ok`/`err` sugar.
-
-**Syntax:**
-```winn
-switch status
-  :active   => "Active"
-  :inactive => "Inactive"
-  _         => "Unknown"
-end
-```
-
-**Implementation:**
-- Lexer: add `switch` token
-- Parser: `switch_expr -> 'switch' expr switch_clauses 'end'`; `switch_clause -> expr '=>' expr_seq`
-- Transform: desugar to `{case_expr, Line, Scrutinee, Clauses}` — each clause becomes `{case_clause, Line, [Pattern], none, Body}`
-- Codegen: handled by existing case codegen
-
-**Tests:** `winn_l2_tests.erl`
+- `use Winn.Test` adds test runner behaviour
+- `assert/1` and `assert_equal/2` as runtime functions in `winn_test.erl`
+- `winn test` compiles all `test/*.winn` files, discovers test modules (functions starting with `test_`), runs them, reports results
+- Colorized pass/fail output with timing
+- Exit code 0 on all pass, 1 on any failure
 
 ---
 
-### L3 — Guards
+### N5 — Import and Alias
 
-**Goal:** `when` guards on function clauses and match/switch clauses.
+**Priority:** Medium
+**Effort:** Small
 
-**Syntax:**
-```winn
-def divide(a, b) when b != 0
-  a / b
-end
-
-def divide(_, 0)
-  {:error, "division by zero"}
-end
-```
-
-```winn
-switch value
-  n when n > 0 => "positive"
-  n when n < 0 => "negative"
-  _            => "zero"
-end
-```
-
-**Implementation:**
-- Lexer: add `when` token
-- Parser: extend `function_def` to accept optional `'when' expr` guard; extend case/switch clauses similarly
-- Transform: pass guard expression through; `wrap_in_case` must carry guard into `case_clause`
-- Codegen: `gen_case_clause` currently hardcodes `cerl:c_atom(true)` as guard — replace with `gen_expr(Guard)` when guard is present
-
-**Tests:** `winn_l3_tests.erl`
-
----
-
-### L4 — try/rescue/after
-
-**Goal:** Exception handling.
-
-**Syntax:**
-```winn
-try
-  risky_operation()
-rescue
-  {:error, reason} => IO.puts("caught: " <> reason)
-  _                => IO.puts("unknown error")
-after
-  cleanup()
-end
-```
-
-**Implementation:**
-- Lexer: add `try`, `rescue`, `after` tokens
-- Parser: `try_expr -> 'try' expr_seq rescue_clauses after_clause 'end'`
-- Transform: `{try_expr, Line, Body, RescueClauses, After}` → Core Erlang `cerl:c_try/5`
-- Codegen: `gen_expr({try_expr,...})` → `cerl:c_try(Body, [Var], Handler, [Var], AfterBody)` where handler is a case over the caught value
-
-**Tests:** `winn_l4_tests.erl`
-
----
-
-## Runtime Additions (No Compiler Changes)
-
-These only require adding functions to `winn_runtime.erl` (exports + implementations) and updating `resolve_dot_call` in `winn_codegen.erl`.
-
----
-
-### R1 — Environment Variables
-
-**Goal:** Read and write OS environment variables.
-
-**Syntax:**
-```winn
-port = System.get_env("PORT")
-# => "4000" or nil
-
-System.get_env("PORT", "3000")   # with default
-System.put_env("DEBUG", "true")
-```
-
-**Implementation:**
-- Add `'system.get_env'/1`, `'system.get_env'/2`, `'system.put_env'/2` to `winn_runtime.erl`
-- `os:getenv/1` returns `false` for missing — normalize to `nil`
-- Add `resolve_dot_call('System', Fun) -> {winn_runtime, ...}` in codegen
-
-**Tests:** `winn_r1_tests.erl`
-
----
-
-### R2 — UUID
-
-**Goal:** Generate UUIDs.
-
-**Syntax:**
-```winn
-id = UUID.v4()
-# => "550e8400-e29b-41d4-a716-446655440000"
-```
-
-**Implementation:**
-- Add dep `{uuid, "2.0.6"}` to `rebar.config` (or implement v4 directly using `crypto:strong_rand_bytes/16`)
-- Add `'uuid.v4'/0` to `winn_runtime.erl`
-- Add `resolve_dot_call('UUID', Fun)` in codegen
-
-**Tests:** `winn_r2_tests.erl` — verify format matches UUID v4 regex
-
----
-
-### R3 — DateTime
-
-**Goal:** Working with dates and times.
-
-**Syntax:**
-```winn
-now  = DateTime.now()              # Unix timestamp (integer seconds)
-iso  = DateTime.to_iso8601(now)    # "2026-03-27T12:00:00Z"
-ts   = DateTime.from_iso8601(iso)
-diff = DateTime.diff(ts1, ts2)     # seconds between two timestamps
-DateTime.format(now, "%Y-%m-%d")
-```
-
-**Implementation:**
-- Add `'datetime.now'/0`, `'datetime.to_iso8601'/1`, `'datetime.from_iso8601'/1`, `'datetime.diff'/2`, `'datetime.format'/2` to `winn_runtime.erl`
-- Use Erlang `calendar` and `os:system_time/1` builtins — no extra dep needed
-- Add `resolve_dot_call('DateTime', Fun)` in codegen
-
-**Tests:** `winn_r3_tests.erl`
-
----
-
-### R4 — Structured Logging
-
-**Goal:** Levelled JSON-structured logging.
-
-**Syntax:**
-```winn
-Logger.info("user created", %{user_id: id})
-Logger.warn("slow query", %{duration_ms: 450})
-Logger.error("db connection failed", %{reason: reason})
-Logger.debug("checkpoint", %{step: 3})
-```
-
-**Implementation:**
-- Add `winn_logger.erl` (new module) — formats `{level, message, metadata}` as JSON line to stderr/stdout
-- Add `resolve_dot_call('Logger', Fun) -> {winn_logger, Fun}` in codegen
-- Use Erlang's built-in `logger` application as the backend (OTP 21+)
-
-**Tests:** `winn_r4_tests.erl` — verify log output format
-
----
-
-### R5 — Crypto / Hashing
-
-**Goal:** Password hashing and general crypto.
-
-**Syntax:**
-```winn
-hash   = Crypto.hash(:sha256, "data")
-hmac   = Crypto.hmac(:sha256, "secret", "data")
-token  = Crypto.random_bytes(32)
-encoded = Crypto.base64_encode(token)
-decoded = Crypto.base64_decode(encoded)
-
-# Password hashing (bcrypt)
-hashed = Crypto.hash_password("mysecret")
-true   = Crypto.verify_password("mysecret", hashed)
-```
-
-**Implementation:**
-- Add `winn_crypto.erl` — wraps `crypto` OTP app + add `bcrypt` dep (`{bcrypt, "1.1.3"}`)
-- Add `resolve_dot_call('Crypto', Fun) -> {winn_crypto, Fun}` in codegen
-
-**Depends on:** Nothing
-
-**Tests:** `winn_r5_tests.erl`
-
----
-
-## New Modules
-
----
-
-### M1 — HTTP Client
-
-**Goal:** Make HTTP requests to external APIs with JSON built-in.
-
-**Syntax:**
-```winn
-# GET
-{:ok, resp} = HTTP.get("https://api.example.com/users")
-
-# POST with JSON body
-{:ok, resp} = HTTP.post("https://api.example.com/users", %{
-  name: "Alice",
-  email: "alice@example.com"
-})
-
-# Access response
-resp.status   # 200
-resp.body     # decoded map (if Content-Type is application/json)
-resp.headers  # map of headers
-```
-
-**Implementation:**
-- Add dep `{hackney, "1.20.1"}` and `{jsone, "1.8.1"}` to `rebar.config`
-- Create `winn_http.erl` with `get/1`, `post/2`, `put/2`, `patch/2`, `delete/1`, `request/3`
-- Automatically encode map bodies to JSON, decode JSON responses
-- Response is a map `#{status, body, headers}`
-- Add `resolve_dot_call('HTTP', Fun) -> {winn_http, Fun}` in codegen
-
-**Tests:** `winn_m1_tests.erl` — mock HTTP or test against httpbin.org
-
----
-
-### M2 — Config System
-
-**Goal:** Environment-specific config files.
-
-**File structure:**
-```
-config/
-├── config.winn       # shared config
-├── dev.winn          # development overrides
-├── prod.winn         # production overrides
-└── test.winn         # test overrides
-```
-
-**config/config.winn:**
-```winn
-config :database,
-  pool_size: 10,
-  timeout: 5000
-
-config :http,
-  port: 4000
-```
-
-**Syntax in code:**
-```winn
-port   = Config.get(:http, :port)           # 4000
-dbsize = Config.get(:database, :pool_size)  # 10
-Config.get(:http, :port, 3000)              # with default
-```
-
-**Implementation:**
-- Add `config` keyword to lexer/parser — `config :key, key: val, key: val`
-- Create `winn_config.erl` — reads and parses config files at app start, stores in ETS
-- `WINN_ENV` env var selects config overlay (`dev`, `prod`, `test`)
-- Add `resolve_dot_call('Config', Fun) -> {winn_config, Fun}` in codegen
-
-**Tests:** `winn_m2_tests.erl`
-
----
-
-### M3 — Application Startup
-
-**Goal:** Define an OTP application entry point with a supervision tree.
+The lexer already has `import` and `alias` tokens, but they're not implemented in the parser/transform.
 
 **Syntax:**
 ```winn
 module MyApp
-  use Winn.Application
+  import Enum          # brings Enum functions into scope as local calls
+  alias MyApp.Auth     # Auth.verify() instead of MyApp.Auth.verify()
 
-  def start(_type, _args)
-    children = [
-      {Counter, [0]},
-      {MyApp.Repo, []}
-    ]
-    Supervisor.start_link(children, %{strategy: :one_for_one})
+  def process(list)
+    map(list) do |x| x * 2 end    # instead of Enum.map(...)
   end
 end
 ```
 
 **Implementation:**
-- `use Winn.Application` → adds `-behaviour(application).` attribute
-- Generates `start/2` wrapper if not defined
-- Update `winn.app.src` to set `mod: {myapp, []}` (needs CLI integration)
-- Add `expand_use` clause for `'Winn', 'Application'` in `winn_transform.erl`
-
-**Depends on:** Works best alongside M2 (Config)
-
-**Tests:** `winn_m3_tests.erl`
+- Parser: `import_stmt -> 'import' module_name` and `alias_stmt -> 'alias' module_name`
+- Transform: `import` rewrites local calls to dot calls on the imported module; `alias` maps short names to full module paths
+- No codegen changes needed — it's purely a transform-level rewrite
 
 ---
 
-### M4 — Task / Async
+### N6 — CLI Task Runner (`winn task`)
 
-**Goal:** Run work concurrently without writing raw GenServer code.
+**Priority:** Medium
+**Effort:** Medium
 
-**Syntax:**
-```winn
-# Fire and forget
-Task.spawn(fn => heavy_computation())
-
-# Async + await
-task   = Task.async(fn => fetch_user(id))
-result = Task.await(task)           # blocks until done
-result = Task.await(task, 5000)     # with timeout (ms)
-
-# Parallel map
-results = Task.async_all([1, 2, 3]) do |n|
-  fetch_user(n)
-end
-```
-
-**Implementation:**
-- Create `winn_task.erl` wrapping Erlang `spawn`/`receive` and message passing
-- `Task.async` spawns a process, returns a ref; `Task.await` blocks on the ref
-- `Task.async_all` spawns N processes, collects all results
-- Add `resolve_dot_call('Task', Fun) -> {winn_task, Fun}` in codegen
-
-**Tests:** `winn_m4_tests.erl`
-
----
-
-### M5 — JWT
-
-**Goal:** Sign and verify JSON Web Tokens for service-to-service auth.
-
-**Syntax:**
-```winn
-secret  = System.get_env("JWT_SECRET")
-token   = JWT.sign(%{user_id: 42, role: :admin}, secret)
-
-match JWT.verify(token, secret)
-  ok claims => claims.user_id
-  err reason => {:error, :unauthorized}
-end
-```
-
-**Implementation:**
-- Add dep `{joken, "2.6.2"}` (Erlang JWT library) to `rebar.config`
-- Create `winn_jwt.erl` wrapping joken for HS256 sign/verify
-- Add `resolve_dot_call('JWT', Fun) -> {winn_jwt, Fun}` in codegen
-
-**Depends on:** R1 (env vars) recommended for secret management
-
-**Tests:** `winn_m5_tests.erl` — sign, verify, expired token, tampered token
-
----
-
-### M6 — WebSockets
-
-**Goal:** WebSocket client for connecting to external services and a server handler for accepting connections.
-
-**Client syntax:**
-```winn
-{:ok, conn} = WS.connect("wss://api.example.com/ws")
-WS.send(conn, %{type: :subscribe, channel: "prices"})
-
-match WS.recv(conn)
-  ok msg  => IO.inspect(msg)
-  err reason => IO.puts("disconnected")
-end
-
-WS.close(conn)
-```
-
-**Server handler syntax:**
-```winn
-module MyApp.WsHandler
-  use Winn.WebSocket
-
-  def on_connect(conn)
-    {:ok, %{conn: conn, subs: []}}
-  end
-
-  def on_message(msg, state)
-    IO.inspect(msg)
-    {:ok, state}
-  end
-
-  def on_close(state)
-    :ok
-  end
-end
-```
-
-**Implementation:**
-- Add dep `{gun, "2.1.0"}` to `rebar.config` (WebSocket client)
-- Create `winn_ws.erl` — client: `connect/1`, `send/2`, `recv/1`, `close/1`
-- Create `winn_ws_handler.erl` — server behaviour wrapper (requires Cowboy if serving)
-- `use Winn.WebSocket` adds `-behaviour(winn_ws_handler)` and callback stubs
-- Add `resolve_dot_call('WS', Fun) -> {winn_ws, Fun}` in codegen
-
-**Tests:** `winn_m6_tests.erl` — client against echo.websocket.org or local mock
-
----
-
-### C1 — CLI Task System
-
-**Goal:** Define and run project tasks from the CLI, similar to Mix tasks.
+Run project tasks from the CLI. Already partially scaffolded (`use Winn.Task` exists).
 
 **Syntax:**
 ```sh
-winn task.run db.migrate
-winn task.run db.seed
-winn task.run routes
+winn task db.migrate
+winn task db.seed
+winn task routes
 ```
 
-**Task definition in Winn:**
 ```winn
 module Tasks.Db.Migrate
   use Winn.Task
 
   def run(args)
     IO.puts("Running migrations...")
+    # Execute SQL migration files
   end
 end
 ```
 
 **Implementation:**
-- Add `use Winn.Task` directive (transform: adds `-behaviour(winn_task)`)
-- Update CLI (`winn_cli.erl`) to handle `task.run <name>` subcommand
-- CLI discovers task modules by scanning compiled `.beam` files for `-behaviour(winn_task)`
-- Built-in tasks: `db.migrate`, `db.rollback`, `db.seed` (stubs that call `winn_repo` migration helpers)
-- Add migration file runner to `winn_repo.erl`
-
-**Depends on:** M3 (Application) recommended; M2 (Config) for DB config
-
-**Tests:** `winn_c1_tests.erl`
+- Add `winn task <name>` to `winn_cli.erl`
+- Compile all `src/` and `tasks/` directories
+- Discover task modules by scanning beams for `-behaviour(winn_task)`
+- Map dotted names: `db.migrate` → module `tasks.db.migrate`
+- Built-in tasks: `db.migrate`, `db.rollback`, `db.seed` (call `winn_repo` helpers)
 
 ---
 
-## Medium Impact — Quality of Life (Planned)
+### N7 — Documentation Generator (`winn docs`)
 
----
+**Priority:** Medium
+**Effort:** Medium
 
-### MI1 — HTTP Middleware System
-
-**Goal:** Before/after hooks for HTTP request processing — auth, CORS, logging, etc.
+Generate HTML or Markdown documentation from source code comments.
 
 **Syntax:**
 ```winn
-module MyApp.Router
-  use Winn.Router
-
-  def middleware()
-    [:log_request, :cors, :authenticate]
-  end
-
-  def log_request(conn, next)
-    Logger.info("#{Server.method(conn)} #{Server.path(conn)}")
-    next(conn)
-  end
-
-  def cors(conn, next)
-    conn = Server.set_header(conn, "access-control-allow-origin", "*")
-    next(conn)
-  end
-
-  def authenticate(conn, next)
-    match Server.header(conn, "authorization")
-      nil => Server.json(conn, %{error: "unauthorized"}, 401)
-      token => next(conn)
-    end
-  end
+# Public: Greet a user by name.
+#
+# name - The name to greet (string).
+#
+# Returns a greeting string.
+def greet(name)
+  "Hello, #{name}!"
 end
 ```
 
-**Implementation:**
-- Add `middleware/0` callback to router convention (returns list of function name atoms)
-- In `winn_router.erl` `init/2`: after matching route, chain middleware fns before calling handler
-- Each middleware receives `(conn, next_fn)` where `next_fn` is a closure over the remaining chain
-- Add `Server.set_header/3` to `winn_server.erl`
-- No lexer/parser changes needed
+```sh
+winn docs                # Generate docs to docs/ from src/
+winn docs --format html  # HTML output
+```
 
-**Tests:** `winn_mi1_tests.erl` — middleware ordering, short-circuit (auth fail), header injection
+**Implementation:**
+- Parse `#` comments preceding `def` and `module` declarations
+- Extract function signatures, module names, and doc comments
+- Generate Markdown (default) or HTML output
+- Include a table of contents and module index
+- Could use TomDoc or a simple custom format
 
 ---
 
-### MI2 — to_string / to_integer Callable from Winn
+### N8 — Hot Code Reloading (`winn watch`)
 
-**Goal:** Make type conversion functions directly callable without module prefix.
+**Priority:** Medium
+**Effort:** Medium
+
+Automatically recompile and reload modules when source files change.
+
+**Syntax:**
+```sh
+winn watch              # Watch src/, recompile on change
+winn watch --start      # Watch + start the app (like winn start but auto-reloads)
+```
+
+**Implementation:**
+- Use Erlang's `filelib` or a file system watcher (inotify on Linux, fsevents on macOS)
+- On file change: recompile the changed `.winn` file, hot-reload the beam via `code:load_file/1`
+- For server apps: reload without dropping connections (BEAM's hot code swap)
+- Debounce rapid changes (300ms)
+
+---
+
+### N9 — Database Migrations
+
+**Priority:** Medium
+**Effort:** Medium
+
+Versioned database schema migrations.
+
+**File structure:**
+```
+migrations/
+├── 001_create_users.winn
+├── 002_add_email_to_users.winn
+└── 003_create_posts.winn
+```
 
 **Syntax:**
 ```winn
-to_string(42)        # => "42"
-to_integer("42")     # => 42
-to_float("3.14")     # => 3.14
-to_atom("hello")     # => :hello
-```
+module Migrations.CreateUsers
+  def up()
+    Repo.execute("CREATE TABLE users (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(255),
+      created_at TIMESTAMP DEFAULT NOW()
+    )")
+  end
 
-**Implementation:**
-- In `winn_codegen.erl` `gen_expr({call, _, Fun, Args})`: check if `Fun` is one of `to_string`, `to_integer`, `to_float`, `to_atom`
-- If so, emit `cerl:c_call(cerl:c_atom(winn_runtime), cerl:c_atom(Fun), Args)` instead of `cerl:c_apply`
-- No lexer/parser/transform changes needed — just a codegen special case
-
-**Tests:** `winn_mi2_tests.erl` — e2e compile `to_string(42)`, `to_integer("5")`, etc.
-
----
-
-### MI3 — Range Literals
-
-**Goal:** `1..10` syntax for generating integer sequences.
-
-**Syntax:**
-```winn
-1..5             # => [1, 2, 3, 4, 5]
-for i in 1..10 do
-  IO.puts(to_string(i))
+  def down()
+    Repo.execute("DROP TABLE users")
+  end
 end
 ```
 
-**Implementation:**
-- Lexer: add `..` two-character operator token (before single `.` rule)
-- Parser: `range_expr -> expr '..' expr` producing `{range, Line, From, To}`
-- Transform: pass through
-- Codegen: `gen_expr({range,...})` → `cerl:c_call(cerl:c_atom(lists), cerl:c_atom(seq), [From, To])`
-- Alternatively, add `Range.new/2` to `winn_runtime.erl` for step support later
+```sh
+winn task db.migrate           # Run pending migrations
+winn task db.rollback          # Rollback last migration
+winn task db.status            # Show migration status
+```
 
-**Tests:** `winn_mi3_tests.erl` — `1..5`, `5..1` (empty or reverse?), `for x in 1..3`
+**Implementation:**
+- `winn_repo.erl` gets `execute/1` for raw SQL
+- Migration runner tracks applied migrations in a `schema_migrations` table
+- Migrations run in a transaction
+- Integrates with N6 (task runner)
 
 ---
 
-### MI4 — Multi-line Switch/Rescue Bodies
+### N10 — Significant Newlines (Breaking Change)
 
-**Goal:** Allow multiple expressions in switch clause and rescue clause bodies.
+**Priority:** Low
+**Effort:** Large
 
-**Current limitation:** Switch/rescue clause bodies are single expressions due to parser ambiguity (no newline tokens).
+Remove the need for `do...end` wrappers in switch/rescue clause bodies by making newlines significant.
 
-**Syntax (desired):**
-```winn
-switch status
-  :active =>
-    Logger.info("active")
-    :ok
-  :inactive =>
-    Logger.warn("inactive")
-    :disabled
-end
-```
-
-**Implementation options:**
-
-**Option A: Add significant newlines.** Add a newline token emitted by the lexer when not inside `()`, `[]`, `{}`. Use it as a clause body terminator. This is the cleanest long-term solution but requires reworking the lexer's whitespace handling (add a depth counter for brackets).
-
-**Option B: Use `do...end` for multi-line bodies.**
+**Before (current):**
 ```winn
 switch status
   :active => do
     Logger.info("active")
     :ok
   end
-  :inactive => do
-    Logger.warn("inactive")
-    :disabled
+  _ => :other
+end
+```
+
+**After:**
+```winn
+switch status
+  :active =>
+    Logger.info("active")
+    :ok
+  _ => :other
+end
+```
+
+**Implementation:**
+- Lexer emits newline tokens when not inside `()`, `[]`, `{}`
+- Parser uses newlines as expression separators and clause body terminators
+- Requires depth tracking in the lexer (bracket nesting counter)
+- Large change — touches most parser rules
+- Consider as a v1.0 breaking change
+
+---
+
+### N11 — Pipe Assign (`|>=`)
+
+**Priority:** Low
+**Effort:** Small
+
+Pipe result into a variable assignment, reducing intermediate bindings.
+
+**Syntax:**
+```winn
+data
+  |> JSON.decode()
+  |> Map.get(:users)
+  |>= users            # assigns to users variable
+
+IO.puts("Got #{to_string(List.length(users))} users")
+```
+
+**Implementation:**
+- Lexer: add `|>=` token
+- Parser: `pipe_assign -> pipe_expr '|>=' ident` producing `{assign, Line, Var, PipeResult}`
+- No transform/codegen changes — just syntactic sugar
+
+---
+
+### N12 — Struct Types
+
+**Priority:** Low
+**Effort:** Medium
+
+Named structs with compile-time field validation, beyond plain maps.
+
+**Syntax:**
+```winn
+module User
+  defstruct [:name, :email, :age]
+end
+
+user = User.new(%{name: "Alice", age: 30})
+user.name   # => "Alice"
+user.role   # => compile error: User has no field :role
+```
+
+**Implementation:**
+- `defstruct` keyword in lexer/parser
+- Transform generates `new/1` function that validates keys
+- Structs are maps with a `__struct__: ModuleName` key (like Elixir)
+- Optional: compile-time field checking in semantic analysis
+
+---
+
+### N13 — Protocols / Behaviours
+
+**Priority:** Low
+**Effort:** Large
+
+Define interfaces that multiple modules can implement.
+
+**Syntax:**
+```winn
+module Printable
+  defprotocol do
+    def to_s(value)
+  end
+end
+
+module User
+  defimpl Printable do
+    def to_s(user)
+      "User(#{user.name})"
+    end
   end
 end
 ```
 
-**Option C: Require explicit `begin...end` blocks.** Similar to B but different keyword.
-
-**Recommended:** Option A (significant newlines) for the best developer experience, but it's a larger change. Option B is a pragmatic interim solution.
-
-**Tests:** `winn_mi4_tests.erl` — multi-expression switch/rescue bodies
+**Implementation:**
+- Protocol dispatch table (ETS or compiled module)
+- `defprotocol` defines the interface, `defimpl` provides implementations
+- Dispatch based on the `__struct__` key or atom type
+- Depends on N12 (Structs) for clean dispatch
 
 ---
 
-### MI5 — Better Compiler Error Messages
+### N14 — Deployment (`winn release`)
 
-**Goal:** Human-readable errors with source file, line number, and context.
+**Priority:** Low
+**Effort:** Medium
 
-**Current state:** Errors are raw Erlang tuples (`{error, {Line, winn_parser, [...]}}`) with no source context.
+Build self-contained releases for production deployment.
 
-**Syntax (desired output):**
-```
-error: unexpected token 'end'
-  --> src/app.winn:15:3
-   |
-15 |   end
-   |   ^^^ expected expression
+**Syntax:**
+```sh
+winn release              # Build a release tarball
+winn release --docker     # Generate a Dockerfile
 ```
 
 **Implementation:**
-- Create `winn_errors.erl` module with `format_error/2` (takes error tuple + source string)
-- Lexer errors: `{Line, winn_lexer, {illegal, Char}}` → "illegal character `X` at line N"
-- Parser errors: `{Line, winn_parser, Msg}` → "syntax error at line N: ..."
-- Core lint errors: extract from `compile:forms` error tuples
-- Add source line context by splitting source on newlines and showing the relevant line
-- Integrate into `winn.erl` `compile_file/2` and `winn_cli.erl` error paths
-- Color output (ANSI codes) when outputting to terminal
-
-**Tests:** `winn_mi5_tests.erl` — verify error message format for known bad inputs
+- Wraps `rebar3 as prod release` or `rebar3 as prod tar`
+- Generates a `rel/` config from project structure
+- Optional Dockerfile generation with Erlang base image
+- Includes all compiled beams + runtime deps
 
 ---
 
-## Build Order Suggestions
+## Ecosystem & Community
 
-**If building for a service that calls external APIs:**
-→ R1 (env vars) → M1 (HTTP client) → M5 (JWT) → R4 (logging)
+### E1 — Project Website
 
-**If building a data-heavy service:**
-→ R1 (env vars) → M2 (config) → M3 (application) → C1 (tasks/migrations)
+- Landing page explaining Winn
+- Interactive playground (compile Winn in the browser via WASM or server-side)
+- Documentation hosted on GitHub Pages
 
-**If adding language expressiveness first:**
-→ L1 (if/else) → L2 (switch) → L3 (guards) → L4 (try/rescue)
+### E2 — Example Projects
 
-**If building a real-time service:**
-→ M4 (tasks) → M6 (websockets) → R4 (logging)
+- **winn-todo-api** — REST API with Postgres, JWT auth, full CRUD
+- **winn-chat** — WebSocket chat server
+- **winn-github-sync** — Worker that polls GitHub API and saves to DB
+
+### E3 — Package Registry
+
+- Winn-native package registry (like Hex.pm)
+- `winn publish` to push packages
+- Dependency resolution beyond raw rebar.config
+
+---
+
+## Suggested Build Orders
+
+**Make it real (build a production service):**
+N1 (stabilize) → N4 (tests) → N9 (migrations) → N6 (tasks) → E2 (example projects)
+
+**Make it developer-friendly:**
+N2 (REPL) → N5 (import/alias) → N8 (hot reload) → N7 (docs)
+
+**Make it production-ready:**
+N1 (stabilize) → N3 (deps) → N14 (releases) → N9 (migrations)
+
+**Make it a real language:**
+N10 (newlines) → N12 (structs) → N13 (protocols) → N5 (import/alias)
 
 ---
 
 ## Status
 
-| Chunk | Description | Status |
-|-------|-------------|--------|
-| L1 | if/else | done |
-| L2 | switch | done |
-| L3 | guards (when) | done |
-| L4 | try/rescue | done |
-| R1 | env vars | done |
-| R2 | UUID | done |
-| R3 | DateTime | done |
-| R4 | structured logging | done |
-| R5 | crypto/hashing | done |
-| M1 | HTTP client | done |
-| M2 | config system | done |
-| M3 | application startup | done |
-| M4 | task/async | done |
-| M5 | JWT | done |
-| M6 | WebSockets | done |
-| C1 | CLI task runner | planned |
-| HI1 | String interpolation | done |
-| HI2 | Map field access | done |
-| HI3 | Standalone lambdas | done |
-| HI4 | Pattern assignment | done |
-| HI5 | JSON module | done |
-| HI6 | for comprehensions | done |
-| S1 | HTTP server (Cowboy) | done |
-| MI1 | Middleware system | planned |
-| MI2 | to_string/to_integer from Winn | planned |
-| MI3 | Range literals (1..10) | planned |
-| MI4 | Multi-line switch/rescue bodies | planned |
-| MI5 | Better compiler error messages | planned |
+| Item | Description | Status |
+|------|-------------|--------|
+| L1-L4 | if/else, switch, guards, try/rescue | done |
+| R1-R5 | env vars, UUID, DateTime, logging, crypto | done |
+| M1-M6 | HTTP client, config, application, tasks, JWT, WebSockets | done |
+| HI1-HI6 | interpolation, field access, lambdas, pattern assign, JSON, for | done |
+| S1 | HTTP server (Cowboy) + middleware | done |
+| MI1-MI5 | middleware, type builtins, ranges, multi-line bodies, error messages | done |
+| Tooling | CLI (new/compile/run/start/version), Homebrew, VS Code extension | done |
+| N1 | Merge to main, CI, changelog | planned |
+| N2 | REPL (winn shell) | planned |
+| N3 | Package management (winn deps) | planned |
+| N4 | Testing framework (winn test) | planned |
+| N5 | Import and alias | planned |
+| N6 | CLI task runner (winn task) | planned |
+| N7 | Documentation generator (winn docs) | planned |
+| N8 | Hot code reloading (winn watch) | planned |
+| N9 | Database migrations | planned |
+| N10 | Significant newlines | planned |
+| N11 | Pipe assign (\|>=) | planned |
+| N12 | Struct types | planned |
+| N13 | Protocols / behaviours | planned |
+| N14 | Deployment (winn release) | planned |
+| E1 | Project website | planned |
+| E2 | Example projects | planned |
+| E3 | Package registry | planned |
