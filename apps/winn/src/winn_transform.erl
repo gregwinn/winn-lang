@@ -39,8 +39,11 @@ transform_form({module, Line, Name, Body}) ->
     SchemaFns = [transform_function(F)
                  || F <- lists:append([expand_schema_def(SD) || SD <- SchemaDefs])],
 
+    %% Expand default parameters into multiple function clauses.
+    ExpandedFns = lists:flatmap(fun expand_default_params/1, Fns),
+
     %% Transform and merge regular functions.
-    Pass1  = [transform_function(F) || F <- Fns],
+    Pass1  = [transform_function(F) || F <- ExpandedFns],
     Merged = merge_fn_clauses(SchemaFns ++ Pass1),
 
     %% Apply import/alias rewrites.
@@ -103,6 +106,55 @@ expand_use(Line, 'Winn', 'Test', _ModName) ->
     {behaviour_only, Attr};
 expand_use(_Line, 'Winn', 'Schema', _ModName) ->
     {schema_use, none}.
+
+%% ── Default parameter expansion ─────────────────────────────────────────
+%% Generates wrapper clauses for functions with default parameters.
+%% def greet(name, greeting = "Hello") ... end
+%% becomes:
+%%   def greet(name)           → greet(name, "Hello")
+%%   def greet(name, greeting) → <original body>
+
+expand_default_params({function, Line, Name, Params, Body}) ->
+    case split_defaults(Params) of
+        {_, []} ->
+            %% No defaults — return as-is
+            [{function, Line, Name, Params, Body}];
+        {Required, Defaults} ->
+            %% Generate the full-arity clause with plain var params
+            FullParams = Required ++ [begin {var, DL, DN} end
+                                      || {default_param, DL, DN, _} <- Defaults],
+            FullClause = {function, Line, Name, FullParams, Body},
+            %% Generate wrapper clauses for each missing default
+            Wrappers = generate_default_wrappers(Line, Name, Required, Defaults),
+            Wrappers ++ [FullClause]
+    end;
+expand_default_params(Other) ->
+    [Other].
+
+split_defaults(Params) ->
+    split_defaults(Params, [], []).
+split_defaults([], Req, Def) ->
+    {lists:reverse(Req), lists:reverse(Def)};
+split_defaults([{default_param, _, _, _} = D | Rest], Req, Def) ->
+    split_defaults(Rest, Req, [D | Def]);
+split_defaults([P | Rest], Req, Def) ->
+    split_defaults(Rest, [P | Req], Def).
+
+generate_default_wrappers(Line, Name, Required, Defaults) ->
+    %% For N defaults, generate N wrappers.
+    %% Wrapper K takes Required + first K default params, fills in the rest.
+    AllDefaults = [{var, DL, DN} || {default_param, DL, DN, _} <- Defaults],
+    AllDefaultVals = [DV || {default_param, _, _, DV} <- Defaults],
+    NumDefaults = length(Defaults),
+    [begin
+        %% Take first K default params as explicit args
+        ExplicitDefParams = lists:sublist(AllDefaults, K),
+        %% Fill remaining defaults with their values
+        RemainingVals = lists:nthtail(K, AllDefaultVals),
+        WrapperParams = Required ++ ExplicitDefParams,
+        CallArgs = Required ++ ExplicitDefParams ++ RemainingVals,
+        {function, Line, Name, WrapperParams, [{call, Line, Name, CallArgs}]}
+     end || K <- lists:seq(0, NumDefaults - 1)].
 
 %% ── Schema definition expansion ──────────────────────────────────────────
 

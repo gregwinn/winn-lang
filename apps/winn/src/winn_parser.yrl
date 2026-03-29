@@ -282,6 +282,10 @@ pattern -> ident
           N   -> {var, line('$1'), N}
       end.
 
+%% Default parameter: name = value (only literals and simple expressions)
+pattern -> ident '=' literal
+    : {default_param, line('$2'), val('$1'), '$3'}.
+
 pattern -> atom_lit
     : {pat_atom, line('$1'), val('$1')}.
 
