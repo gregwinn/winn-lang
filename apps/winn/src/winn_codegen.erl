@@ -28,7 +28,21 @@ gen_module({module, _Line, Name, Body}) ->
 
     Defs = [gen_function(F) || F <- Functions],
 
-    cerl:c_module(ModName, Exports, Attrs, Defs).
+    %% Add module_info/0 and module_info/1 (not auto-generated for from_core).
+    MI0Var = cerl:c_var({module_info, 0}),
+    MI0Fun = cerl:c_fun([],
+        cerl:c_call(cerl:c_atom(erlang), cerl:c_atom(get_module_info),
+                    [ModName])),
+    MI1Arg = cerl:c_var('X'),
+    MI1Var = cerl:c_var({module_info, 1}),
+    MI1Fun = cerl:c_fun([MI1Arg],
+        cerl:c_call(cerl:c_atom(erlang), cerl:c_atom(get_module_info),
+                    [ModName, MI1Arg])),
+
+    AllExports = Exports ++ [MI0Var, MI1Var],
+    AllDefs    = Defs ++ [{MI0Var, MI0Fun}, {MI1Var, MI1Fun}],
+
+    cerl:c_module(ModName, AllExports, Attrs, AllDefs).
 
 %% ── Function ───────────────────────────────────────────────────────────────
 
@@ -85,6 +99,11 @@ gen_expr({call, _Line, Fun, Args}) when
         Fun =:= inspect ->
     CArgs = [gen_expr(A) || A <- Args],
     cerl:c_call(cerl:c_atom(winn_runtime), cerl:c_atom(Fun), CArgs);
+%% Test assertion builtins — routed to winn_test module.
+gen_expr({call, _Line, Fun, Args}) when
+        Fun =:= assert; Fun =:= assert_equal ->
+    CArgs = [gen_expr(A) || A <- Args],
+    cerl:c_call(cerl:c_atom(winn_test), cerl:c_atom(Fun), CArgs);
 gen_expr({call, _Line, Fun, Args}) ->
     Op    = cerl:c_var({fn_atom(Fun), length(Args)}),
     CArgs = [gen_expr(A) || A <- Args],

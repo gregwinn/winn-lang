@@ -349,3 +349,35 @@ Also available via module prefix:
 
 - `String.to_integer(str)` — parse integer
 - `String.to_float(str)` — parse float
+
+## Testing
+
+### `assert(expr)`
+Assert that `expr` is `true`. Raises an assertion error on `false`.
+
+```winn
+assert(1 + 1 == 2)
+```
+
+### `assert_equal(expected, actual)`
+Assert that two values are strictly equal (`=:=`). On failure, shows the expected and actual values.
+
+```winn
+assert_equal("hello", String.downcase("HELLO"))
+```
+
+### `use Winn.Test`
+Marks a module as a test module. Test functions must be named `test_*` with zero arguments.
+
+```winn
+module UserTest
+  use Winn.Test
+
+  def test_greeting()
+    result = "Hello, " <> "Alice"
+    assert_equal("Hello, Alice", result)
+  end
+end
+```
+
+Run with `winn test`. See [CLI Reference](cli.md#winn-test-file) for details.
