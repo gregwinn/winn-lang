@@ -375,6 +375,42 @@ list
   |> Enum.map()    do |x| x * 10 end
 ```
 
+### Pipe Assign (`|>=`)
+
+Capture the result of a pipe chain into a variable:
+
+```winn
+[1, 2, 3, 4, 5]
+  |> Enum.filter() do |x| x > 2 end
+  |> Enum.map() do |x| x * 10 end
+  |>= results
+
+IO.puts("Got #{to_string(List.length(results))} results")
+```
+
+`|>=` assigns the pipe result to the named variable. The variable is available in subsequent expressions.
+
+## Triple-Quoted Strings
+
+Use `"""..."""` for multi-line strings. Common leading whitespace is stripped automatically, and embedded `"` quotes don't need escaping:
+
+```winn
+sql = """
+  SELECT *
+  FROM users
+  WHERE active = true
+  ORDER BY created_at DESC
+"""
+
+html = """
+  <div class="card">
+    <h1>#{title}</h1>
+  </div>
+"""
+```
+
+Triple-quoted strings support interpolation (`#{}`) just like regular strings.
+
 ## Standalone Lambdas
 
 Create anonymous functions with `fn(params) => body end`:
