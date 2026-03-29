@@ -2,6 +2,21 @@
 
 All notable changes to the Winn language are documented here.
 
+## [Unreleased]
+
+### Testing Framework
+- **`winn test`** — run Winn tests from the CLI (`winn test` or `winn test <file>`)
+- **`use Winn.Test`** — marks a module as a test module
+- **`assert(expr)`** — assert a condition is true
+- **`assert_equal(expected, actual)`** — assert two values are strictly equal
+- Test discovery finds `test_*` functions automatically
+- Colorized pass/fail output with timing
+- Compiles `src/` before tests so project modules are available
+- Exit code 0 on all pass, 1 on any failure
+
+### Compiler
+- **`module_info/0` and `module_info/1`** — now generated for all compiled modules (fixes Core Erlang gap)
+
 ## [0.2.0] - 2026-03-28
 
 ### Language Features

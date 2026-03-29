@@ -83,6 +83,9 @@ expand_use(Line, 'Winn', 'WebSocket', _ModName) ->
 expand_use(Line, 'Winn', 'Task', _ModName) ->
     Attr = {behaviour_attr, Line, winn_task},
     {behaviour_only, Attr};
+expand_use(Line, 'Winn', 'Test', _ModName) ->
+    Attr = {behaviour_attr, Line, winn_test},
+    {behaviour_only, Attr};
 expand_use(_Line, 'Winn', 'Schema', _ModName) ->
     {schema_use, none}.
 
