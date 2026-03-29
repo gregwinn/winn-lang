@@ -2,6 +2,12 @@
 
 All notable changes to the Winn language are documented here.
 
+## [Unreleased]
+
+### Language Features
+- **`import Module`** — bring a module's functions into scope as local calls (e.g., `import Enum` lets you write `map(list)` instead of `Enum.map(list)`)
+- **`alias Parent.Child`** — use a short name for a dotted module path (e.g., `alias MyApp.Auth` lets you write `Auth.verify()`)
+
 ## [0.2.0] - 2026-03-28
 
 ### Language Features

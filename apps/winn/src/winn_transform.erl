@@ -23,9 +23,11 @@ transform(Forms) when is_list(Forms) ->
 %% ── Top-level forms ────────────────────────────────────────────────────────
 
 transform_form({module, Line, Name, Body}) ->
-    %% Separate use directives, schema defs, and regular functions.
+    %% Separate use, import, alias directives, schema defs, and regular functions.
     {UseDirs, Rest1}    = lists:partition(fun({use_directive,_,_,_}) -> true; (_) -> false end, Body),
-    {SchemaDefs, Fns}   = lists:partition(fun({schema_def,_,_,_})    -> true; (_) -> false end, Rest1),
+    {ImportDirs, Rest2} = lists:partition(fun({import_directive,_,_}) -> true; (_) -> false end, Rest1),
+    {AliasDirs, Rest3}  = lists:partition(fun({alias_directive,_,_,_}) -> true; (_) -> false end, Rest2),
+    {SchemaDefs, Fns}   = lists:partition(fun({schema_def,_,_,_})    -> true; (_) -> false end, Rest3),
 
     %% Expand use directives.
     Expanded       = [expand_use(ULine, Mod, Sub, Name) || {use_directive, ULine, Mod, Sub} <- UseDirs],
@@ -41,7 +43,20 @@ transform_form({module, Line, Name, Body}) ->
     Pass1  = [transform_function(F) || F <- Fns],
     Merged = merge_fn_clauses(SchemaFns ++ Pass1),
 
-    {module, Line, Name, BehaviourAttrs ++ SyntheticFns ++ Merged};
+    %% Apply import/alias rewrites.
+    Imports  = [Mod || {import_directive, _, Mod} <- ImportDirs],
+    AliasMap = maps:from_list(
+        [{Sub, list_to_atom(atom_to_list(Top) ++ "." ++ atom_to_list(Sub))}
+         || {alias_directive, _, Top, Sub} <- AliasDirs]),
+    Final = case {Imports, maps:size(AliasMap)} of
+        {[], 0} -> Merged;
+        _ ->
+            LocalFns = sets:from_list(
+                [FName || {function, _, FName, _, _} <- Merged]),
+            [rewrite_directives(F, Imports, AliasMap, LocalFns) || F <- Merged]
+    end,
+
+    {module, Line, Name, BehaviourAttrs ++ SyntheticFns ++ Final};
 transform_form(Other) ->
     Other.
 
@@ -408,3 +423,73 @@ transform_match_clause({match_clause, Line, err, PatternNode, Body}) ->
     ErrPat = {pat_tuple, Line, [{pat_atom, Line, error}, PatternNode]},
     TransBody = transform_seq(Body),
     {case_clause, Line, [ErrPat], none, TransBody}.
+
+%% ── Import/alias rewriting ──────────────────────────────────────────────────
+%% Walks the AST and rewrites:
+%%   - Local calls to dot calls when the function is imported and not local
+%%   - Dot calls with aliased short names to full module names
+
+rewrite_directives({function, Line, Name, Params, Body}, Imports, AliasMap, LocalFns) ->
+    {function, Line, Name, Params,
+     [rewrite_expr(E, Imports, AliasMap, LocalFns) || E <- Body]}.
+
+rewrite_expr({call, Line, Fun, Args}, Imports, AliasMap, LocalFns) ->
+    RArgs = [rewrite_expr(A, Imports, AliasMap, LocalFns) || A <- Args],
+    case {sets:is_element(Fun, LocalFns), Imports} of
+        {false, [ImportMod | _]} ->
+            %% Not a local function and we have an import — rewrite to dot call
+            {dot_call, Line, ImportMod, Fun, RArgs};
+        _ ->
+            {call, Line, Fun, RArgs}
+    end;
+rewrite_expr({dot_call, Line, Mod, Fun, Args}, Imports, AliasMap, LocalFns) ->
+    RArgs = [rewrite_expr(A, Imports, AliasMap, LocalFns) || A <- Args],
+    case maps:get(Mod, AliasMap, undefined) of
+        undefined -> {dot_call, Line, Mod, Fun, RArgs};
+        FullMod   -> {dot_call, Line, FullMod, Fun, RArgs}
+    end;
+rewrite_expr({op, Line, Op, Lhs, Rhs}, Imports, AliasMap, LocalFns) ->
+    {op, Line, Op,
+     rewrite_expr(Lhs, Imports, AliasMap, LocalFns),
+     rewrite_expr(Rhs, Imports, AliasMap, LocalFns)};
+rewrite_expr({unary, Line, Op, Expr}, Imports, AliasMap, LocalFns) ->
+    {unary, Line, Op, rewrite_expr(Expr, Imports, AliasMap, LocalFns)};
+rewrite_expr({assign, Line, Var, Expr}, Imports, AliasMap, LocalFns) ->
+    {assign, Line, Var, rewrite_expr(Expr, Imports, AliasMap, LocalFns)};
+rewrite_expr({if_expr, Line, Cond, Then, Else}, Imports, AliasMap, LocalFns) ->
+    {if_expr, Line,
+     rewrite_expr(Cond, Imports, AliasMap, LocalFns),
+     [rewrite_expr(E, Imports, AliasMap, LocalFns) || E <- Then],
+     [rewrite_expr(E, Imports, AliasMap, LocalFns) || E <- Else]};
+rewrite_expr({switch_expr, Line, Scrutinee, Clauses}, Imports, AliasMap, LocalFns) ->
+    {switch_expr, Line,
+     rewrite_expr(Scrutinee, Imports, AliasMap, LocalFns),
+     [rewrite_clause(C, Imports, AliasMap, LocalFns) || C <- Clauses]};
+rewrite_expr({case_expr, Line, Scrutinee, Clauses}, Imports, AliasMap, LocalFns) ->
+    {case_expr, Line,
+     rewrite_expr(Scrutinee, Imports, AliasMap, LocalFns),
+     [rewrite_clause(C, Imports, AliasMap, LocalFns) || C <- Clauses]};
+rewrite_expr({block, Line, Params, Body}, Imports, AliasMap, LocalFns) ->
+    {block, Line, Params,
+     [rewrite_expr(E, Imports, AliasMap, LocalFns) || E <- Body]};
+rewrite_expr({fn_expr, Line, Params, Body}, Imports, AliasMap, LocalFns) ->
+    {fn_expr, Line, Params,
+     [rewrite_expr(E, Imports, AliasMap, LocalFns) || E <- Body]};
+rewrite_expr({try_expr, Line, Body, Rescues}, Imports, AliasMap, LocalFns) ->
+    {try_expr, Line,
+     [rewrite_expr(E, Imports, AliasMap, LocalFns) || E <- Body],
+     [rewrite_clause(C, Imports, AliasMap, LocalFns) || C <- Rescues]};
+rewrite_expr({tuple, Line, Elems}, Imports, AliasMap, LocalFns) ->
+    {tuple, Line, [rewrite_expr(E, Imports, AliasMap, LocalFns) || E <- Elems]};
+rewrite_expr({list, Line, Elems}, Imports, AliasMap, LocalFns) ->
+    {list, Line, [rewrite_expr(E, Imports, AliasMap, LocalFns) || E <- Elems]};
+rewrite_expr({map_lit, Line, Pairs}, Imports, AliasMap, LocalFns) ->
+    {map_lit, Line,
+     [{K, rewrite_expr(V, Imports, AliasMap, LocalFns)} || {K, V} <- Pairs]};
+rewrite_expr(Other, _Imports, _AliasMap, _LocalFns) ->
+    %% Literals, vars, atoms, patterns — pass through unchanged
+    Other.
+
+rewrite_clause({case_clause, Line, Pats, Guard, Body}, Imports, AliasMap, LocalFns) ->
+    {case_clause, Line, Pats, Guard,
+     [rewrite_expr(E, Imports, AliasMap, LocalFns) || E <- Body]}.
