@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```sh
 rebar3 compile              # Compile everything
-rebar3 eunit                # Run all 313 tests
+rebar3 eunit                # Run all 360 tests
 rebar3 eunit --module=winn_l1_tests  # Run a single test module
 rebar3 escriptize           # Build the winn CLI escript
 ./_build/default/bin/winn help       # Verify CLI works
@@ -43,10 +43,12 @@ All AST nodes are tagged tuples: `{Tag, Line, ...fields}`. No records. Key shape
 `winn_transform.erl` runs these passes in sequence:
 
 1. **Use directives** → behaviour attributes + synthetic functions (GenServer gets `start_link/1`)
-2. **Schema defs** → generated `__schema__/1` and `new/1` functions
-3. **All functions case-wrapped** → even simple-var params get wrapped so guarded + non-guarded clauses merge
-4. **Multi-clause merge** → adjacent same-name/arity functions become one function with case clauses
-5. **Expression desugaring** → pipes flattened, match blocks → case, interpolation → `<>` chains, `for` → `Enum.map`
+2. **Import/alias extraction** → builds import list and alias map from directives
+3. **Schema defs** → generated `__schema__/1` and `new/1` functions
+4. **All functions case-wrapped** → even simple-var params get wrapped so guarded + non-guarded clauses merge
+5. **Multi-clause merge** → adjacent same-name/arity functions become one function with case clauses
+6. **Expression desugaring** → pipes flattened, match blocks → case, interpolation → `<>` chains, `for` → `Enum.map`
+7. **Import/alias rewriting** → local calls rewritten to dot calls (import), short module names expanded (alias)
 
 ## Module Name Mapping (Codegen)
 
@@ -65,7 +67,7 @@ To add a new Winn module: create `winn_newmod.erl`, add a `resolve_dot_call` cla
 
 ## Builtin Function Detection
 
-`to_string`, `to_integer`, `to_float`, `to_atom`, and `inspect` are detected in codegen as local calls and routed to `winn_runtime` instead of `cerl:c_apply`.
+`to_string`, `to_integer`, `to_float`, `to_atom`, and `inspect` are detected in codegen as local calls and routed to `winn_runtime`. `assert` and `assert_equal` are routed to `winn_test`.
 
 ## Variable Scoping in Codegen
 
@@ -99,13 +101,16 @@ Use unique module names in each test to avoid beam cache collisions.
 ## Naming Conventions
 
 - Winn module names: PascalCase → compile to lowercase atoms (`HelloWorld` → `helloworld`)
+- Dotted module names: `module MyApp.Router` → atom `'myapp.router'`
+- Module names as values: PascalCase atoms are lowercased in codegen (`Post` → `post`)
+- Function names can end with `?` for predicates (`contains?`, `valid?`)
 - Runtime functions: dotted atoms (`'io.puts'`, `'enum.map'`)
 - Variables: Core Erlang requires uppercase, so codegen capitalizes first char (`x` → `X`)
 - Pattern nodes use `pat_` prefix: `pat_tuple`, `pat_atom`, `pat_var`, `pat_wildcard`
 
 ## CLI (winn_cli.erl)
 
-Commands: `new`, `compile`, `run`, `start`, `console`, `version`, `help`. The `start` command compiles all `src/*.winn`, loads `_build` dep paths, starts OTP apps, calls `main()`, and blocks with `receive` to keep the VM alive. The `run` command reads the module name from the source file (regex on `module Name`), not from the filename.
+Commands: `new`, `compile`, `run`, `start`, `test`, `docs`, `watch`, `console`, `deps`, `version`, `help`. The `start` command compiles all `src/*.winn`, loads `_build` dep paths, starts OTP apps, calls `main()`, and blocks with `receive` to keep the VM alive. The `run` command reads the module name from the source file (regex on `module Name`), not from the filename.
 
 ## Release Process
 

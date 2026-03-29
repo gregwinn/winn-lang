@@ -1,8 +1,8 @@
 # Winn Roadmap
 
-## Current Status — v0.2.0
+## Current Status — v0.3.2
 
-294 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
+360 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
 
 ### Completed
 
@@ -12,14 +12,23 @@
 | Language | String interpolation (`"#{expr}"`), standalone lambdas (`fn => end`) | v0.2.0 |
 | Language | For comprehensions, range literals (`1..10`), pattern assignment | v0.2.0 |
 | Language | Map field access (`user.name`), multi-line switch/rescue bodies | v0.2.0 |
+| Language | `import Module`, `alias Parent.Child` | v0.3.0 |
+| Language | Dotted module names (`module MyApp.Router`), `?` in names | v0.3.2 |
+| Language | Module names as expressions (`Repo.insert(Post, data)`) | v0.3.1 |
 | Runtime | System (env vars), UUID, DateTime, Logger, Crypto | v0.1.0 |
 | Runtime | JSON module, type builtins (to_string, to_integer, etc.) | v0.2.0 |
 | Modules | HTTP client (hackney), HTTP server (Cowboy), middleware | v0.2.0 |
 | Modules | Config (ETS), Task/Async, JWT (pure Erlang), WebSockets (gun) | v0.1.0 |
 | OTP | GenServer, Supervisor, Application, Task behaviours | v0.1.0 |
 | ORM | Schema DSL, Changeset, Repo (PostgreSQL via epgsql) | v0.1.0 |
-| Tooling | CLI (new/compile/run/start/version), Homebrew formula | v0.2.0 |
+| Testing | `winn test`, `use Winn.Test`, `assert`/`assert_equal` | v0.3.0 |
+| Tooling | CLI (new/compile/run/start/test/docs/watch/version), Homebrew | v0.3.0 |
 | Tooling | VS Code extension, compiler error messages with source context | v0.2.0 |
+| Tooling | `winn docs` with Mermaid dependency graph | v0.3.0 |
+| Tooling | `winn watch` with live terminal dashboard | v0.3.0 |
+| Tooling | CI (GitHub Actions), CHANGELOG, merge to main | v0.2.0 |
+| Tooling | REPL (`winn console`), dependency management (`winn deps`) | v0.2.0 |
+| Compiler | `module_info/0,1` generated for all compiled modules | v0.3.0 |
 
 ---
 
@@ -493,14 +502,14 @@ N10 (newlines) → N12 (structs) → N13 (protocols) → N5 (import/alias)
 | S1 | HTTP server (Cowboy) + middleware | done |
 | MI1-MI5 | middleware, type builtins, ranges, multi-line bodies, error messages | done |
 | Tooling | CLI (new/compile/run/start/version), Homebrew, VS Code extension | done |
-| N1 | Merge to main, CI, changelog | planned |
-| N2 | REPL (winn shell) | planned |
-| N3 | Package management (winn deps) | planned |
-| N4 | Testing framework (winn test) | planned |
-| N5 | Import and alias | planned |
+| N1 | Merge to main, CI, changelog | **done** (v0.2.0) |
+| N2 | REPL (winn console) | **done** (v0.2.0) |
+| N3 | Package management (winn deps) | **done** (v0.2.0) |
+| N4 | Testing framework (winn test) | **done** (v0.3.0) |
+| N5 | Import and alias | **done** (v0.3.0) |
 | N6 | CLI task runner (winn task) | planned |
-| N7 | Documentation generator (winn docs) | planned |
-| N8 | Hot code reloading (winn watch) | planned |
+| N7 | Documentation generator (winn docs) | **done** (v0.3.0) |
+| N8 | Hot code reloading (winn watch) | **done** (v0.3.0) |
 | N9 | Database migrations | planned |
 | N10 | Significant newlines | planned |
 | N11 | Pipe assign (\|>=) | planned |
