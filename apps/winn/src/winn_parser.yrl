@@ -44,7 +44,7 @@ Terminals
     'and' 'or' 'not'
     ident module_name
     atom_lit integer_lit float_lit string_lit interp_string boolean_lit
-    '|>' '=>' '..'
+    '|>' '|>=' '=>' '..'
     '<>'
     '==' '!='
     '<=' '>='
@@ -124,6 +124,8 @@ expr -> pipe_expr : '$1'.
 pipe_expr -> or_expr                       : '$1'.
 pipe_expr -> pipe_expr '|>' or_expr
     : {pipe, line('$2'), '$1', '$3'}.
+pipe_expr -> pipe_expr '|>=' ident
+    : {assign, line('$2'), {var, line('$3'), val('$3')}, '$1'}.
 
 or_expr -> and_expr                        : '$1'.
 or_expr -> or_expr 'or' and_expr
