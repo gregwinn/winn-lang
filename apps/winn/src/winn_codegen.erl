@@ -138,7 +138,7 @@ gen_expr({var, _Line, Name}) ->
 %% Literals
 gen_expr({integer, _Line, V})  -> cerl:c_int(V);
 gen_expr({float,   _Line, V})  -> cerl:c_float(V);
-gen_expr({atom,    _Line, V})  -> cerl:c_atom(V);
+gen_expr({atom,    _Line, V})  -> cerl:c_atom(resolve_atom(V));
 gen_expr({boolean, _Line, V})  -> cerl:c_atom(V);
 gen_expr({nil,     _Line})     -> cerl:c_atom(nil);
 
@@ -331,6 +331,18 @@ winn_module_atom(Name) when is_atom(Name) ->
     list_to_atom(string:lowercase(atom_to_list(Name))).
 
 fn_atom(Name) when is_atom(Name) -> Name.
+
+%% Module name references (PascalCase) used as values are lowercased
+%% to match compiled module names: Post -> post.
+%% Regular atoms (:ok, :error, etc.) are left as-is.
+resolve_atom(V) when is_atom(V) ->
+    Str = atom_to_list(V),
+    case Str of
+        [C | _] when C >= $A, C =< $Z ->
+            list_to_atom(string:lowercase(Str));
+        _ ->
+            V
+    end.
 
 %% Capitalise the first letter of a variable name for Core Erlang convention.
 %% Only lowercase ASCII letters are capitalised; _ and uppercase are left alone.
