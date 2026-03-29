@@ -39,6 +39,9 @@ main(Args) ->
             winn_repl:start(),
             halt(0);
 
+        {test, TestArgs} ->
+            run_tests(TestArgs);
+
         {deps, Sub} ->
             Result = run_deps(Sub),
             case Result of
@@ -67,6 +70,8 @@ parse_args(["compile", File])      -> {compile, [File]};
 parse_args(["run", File | Args])   -> {run, File, Args};
 parse_args(["start" | Args])       -> {start, Args};
 parse_args(["console" | _])        -> console;
+parse_args(["test"])                -> {test, []};
+parse_args(["test" | Args])        -> {test, Args};
 parse_args(["deps" | Sub])         -> {deps, Sub};
 parse_args(["version" | _])        -> version;
 parse_args(["-v" | _])             -> version;
@@ -297,9 +302,8 @@ tmp_dir() ->
     integer_to_list(erlang:unique_integer([positive])).
 
 ensure_dir(Dir) ->
-    case file:make_dir(Dir) of
+    case filelib:ensure_path(Dir) of
         ok              -> ok;
-        {error, eexist} -> ok;
         {error, Reason} -> {error, Reason}
     end.
 
@@ -307,6 +311,80 @@ cleanup_dir(Dir) ->
     Beams = filelib:wildcard(Dir ++ "/*.beam"),
     [file:delete(B) || B <- Beams],
     file:del_dir(Dir).
+
+%% ── Test runner ─────────────────────────────────────────────────────────
+
+run_tests(Args) ->
+    Files = find_test_files(Args),
+    case Files of
+        [] ->
+            io:format("No test files found.~n"),
+            halt(1);
+        _ ->
+            TmpDir = "_build/test",
+            ok = ensure_dir(TmpDir),
+            {Compiled, Errors} = compile_test_files(Files, TmpDir),
+            case Errors of
+                [] -> ok;
+                _ ->
+                    io:format("~B file(s) failed to compile.~n", [length(Errors)]),
+                    halt(1)
+            end,
+            Modules = load_test_beams(TmpDir, Compiled),
+            case winn_test:run_tests(Modules) of
+                ok    -> halt(0);
+                error -> halt(1)
+            end
+    end.
+
+find_test_files([]) ->
+    %% Find all .winn files in test/ directory
+    case filelib:is_dir("test") of
+        true  -> filelib:wildcard("test/*.winn");
+        false -> []
+    end;
+find_test_files(Paths) ->
+    %% Specific files passed as arguments
+    lists:filter(fun filelib:is_file/1, Paths).
+
+compile_test_files(Files, OutDir) ->
+    %% Also compile src/ first so test modules can call project modules
+    SrcFiles = case filelib:is_dir("src") of
+        true  -> filelib:wildcard("src/*.winn");
+        false -> []
+    end,
+    SrcDir = "_build/test/src",
+    ok = ensure_dir(SrcDir),
+    lists:foreach(fun(F) ->
+        case winn:compile_file(F, SrcDir) of
+            {ok, _} -> ok;
+            _ -> ok
+        end
+    end, SrcFiles),
+    %% Add src beam dir to code path
+    code:add_patha(SrcDir),
+    %% Compile test files
+    lists:foldl(fun(File, {Ok, Err}) ->
+        case winn:compile_file(File, OutDir) of
+            {ok, _} -> {[File | Ok], Err};
+            {error, Reason} ->
+                io:format("Error compiling ~s: ~p~n", [File, Reason]),
+                {Ok, [File | Err]}
+        end
+    end, {[], []}, Files).
+
+load_test_beams(Dir, _Compiled) ->
+    code:add_patha(Dir),
+    Beams = filelib:wildcard(Dir ++ "/*.beam"),
+    lists:filtermap(fun(BeamPath) ->
+        ModStr = filename:basename(BeamPath, ".beam"),
+        Mod = list_to_atom(ModStr),
+        code:purge(Mod),
+        case code:load_file(Mod) of
+            {module, Mod} -> {true, Mod};
+            _ -> false
+        end
+    end, Beams).
 
 %% ── Deps subcommand ─────────────────────────────────────────────────────
 
@@ -358,6 +436,8 @@ print_usage() ->
         "  winn run <file>         Compile and run a single .winn file~n"
         "  winn start              Compile project and start (keeps VM alive)~n"
         "  winn start <module>     Start with a specific module~n"
+        "  winn test               Run all tests in test/~n"
+        "  winn test <file>        Run a specific test file~n"
         "  winn deps               Manage dependencies~n"
         "  winn console            Interactive console~n"
         "  winn version            Show version~n"

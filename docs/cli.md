@@ -144,6 +144,54 @@ Use `winn start` for:
 
 ---
 
+### `winn test [file]`
+
+Run Winn tests.
+
+```sh
+# Run all tests in test/
+winn test
+
+# Run a specific test file
+winn test test/math_test.winn
+```
+
+Write tests using `use Winn.Test`:
+
+```winn
+module MathTest
+  use Winn.Test
+
+  def test_addition()
+    assert(1 + 1 == 2)
+  end
+
+  def test_string_equality()
+    result = "hello" <> " world"
+    assert_equal("hello world", result)
+  end
+end
+```
+
+**Assertions:**
+
+| Function | Description |
+|----------|-------------|
+| `assert(expr)` | Passes if `expr` is `true` |
+| `assert_equal(expected, actual)` | Passes if `expected =:= actual` |
+
+**How it works:**
+
+1. Compiles all `test/*.winn` files (and `src/*.winn` for project modules)
+2. Loads compiled beams into the VM
+3. Discovers functions named `test_*` in test modules
+4. Runs each test function, catches assertion failures
+5. Prints colorized pass/fail results with timing
+
+Exit code is 0 when all tests pass, 1 on any failure.
+
+---
+
 ### `winn deps`
 
 Manage project dependencies.
