@@ -160,6 +160,7 @@ unary_expr -> '-' unary_expr
 primary_expr -> call_expr                  : '$1'.
 primary_expr -> block_call                 : '$1'.
 primary_expr -> ident                      : {var, line('$1'), val('$1')}.
+primary_expr -> module_name                : {atom, line('$1'), val('$1')}.
 primary_expr -> ident '.' ident            : {field_access, line('$2'), {var, line('$1'), val('$1')}, val('$3')}.
 primary_expr -> literal                    : '$1'.
 primary_expr -> '(' expr ')'               : '$2'.
