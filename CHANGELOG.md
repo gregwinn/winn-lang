@@ -2,6 +2,13 @@
 
 All notable changes to the Winn language are documented here.
 
+## [Unreleased]
+
+### Tooling
+- **`winn watch`** — file watcher with hot code reloading and live terminal dashboard
+- **Live dashboard** — shows per-module status, reload times, compile errors inline, reload count, and uptime
+- **`winn watch --start`** — watch mode + starts the app (OTP apps, calls main)
+
 ## [0.2.0] - 2026-03-28
 
 ### Language Features

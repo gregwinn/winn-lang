@@ -39,6 +39,10 @@ main(Args) ->
             winn_repl:start(),
             halt(0);
 
+        {watch, WatchArgs} ->
+            Opts = #{start => lists:member("--start", WatchArgs)},
+            winn_watch:start(Opts);
+
         {deps, Sub} ->
             Result = run_deps(Sub),
             case Result of
@@ -67,6 +71,7 @@ parse_args(["compile", File])      -> {compile, [File]};
 parse_args(["run", File | Args])   -> {run, File, Args};
 parse_args(["start" | Args])       -> {start, Args};
 parse_args(["console" | _])        -> console;
+parse_args(["watch" | Args])       -> {watch, Args};
 parse_args(["deps" | Sub])         -> {deps, Sub};
 parse_args(["version" | _])        -> version;
 parse_args(["-v" | _])             -> version;
@@ -358,6 +363,8 @@ print_usage() ->
         "  winn run <file>         Compile and run a single .winn file~n"
         "  winn start              Compile project and start (keeps VM alive)~n"
         "  winn start <module>     Start with a specific module~n"
+        "  winn watch              Watch files and hot-reload with live dashboard~n"
+        "  winn watch --start      Watch + start the app~n"
         "  winn deps               Manage dependencies~n"
         "  winn console            Interactive console~n"
         "  winn version            Show version~n"

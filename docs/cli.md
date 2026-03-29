@@ -144,6 +144,42 @@ Use `winn start` for:
 
 ---
 
+### `winn watch`
+
+Watch source files and hot-reload modules on change with a live terminal dashboard.
+
+```sh
+# Watch and recompile only
+winn watch
+
+# Watch + start the app (like winn start but with auto-reload)
+winn watch --start
+```
+
+The dashboard shows:
+
+```
+┌─ Winn Watch ─────────────────────────────────┐
+│ Watching src/ (3 modules)                     │
+│                                               │
+│  ✓ Api          reloaded 2s ago               │
+│  ✓ Auth         reloaded 14s ago              │
+│  ✗ User         compile error                 │
+│    └ line 12: undefined var `nam`             │
+│                                               │
+│ Reloads: 7  Errors: 1  Uptime: 2m 30s        │
+└───────────────────────────────────────────────┘
+```
+
+**Features:**
+- Polls `src/*.winn` every 500ms for changes
+- Hot-reloads changed modules via BEAM code swap (no restart needed)
+- Compile errors keep the last working version loaded
+- Live dashboard with per-module status, reload times, and error details
+- `--start` flag starts OTP apps and calls `main()` before watching
+
+---
+
 ### `winn deps`
 
 Manage project dependencies.
