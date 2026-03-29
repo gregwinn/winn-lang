@@ -15,7 +15,7 @@
 Nonterminals
     program
     top_forms top_form
-    module_def module_body
+    module_def module_body dotted_name
     use_directive import_directive alias_directive
     function_def param_list pattern_list
     expr_seq
@@ -67,8 +67,12 @@ top_form -> module_def : '$1'.
 
 %% ── Module ─────────────────────────────────────────────────────────────────
 
-module_def -> 'module' module_name module_body 'end'
-    : {module, line('$1'), val('$2'), '$3'}.
+module_def -> 'module' dotted_name module_body 'end'
+    : {module, line('$1'), '$2', '$3'}.
+
+dotted_name -> module_name                    : val('$1').
+dotted_name -> module_name '.' dotted_name    :
+    list_to_atom(atom_to_list(val('$1')) ++ "." ++ atom_to_list('$3')).
 
 module_body -> '$empty' : [].
 module_body -> function_def module_body : ['$1' | '$2'].
