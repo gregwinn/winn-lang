@@ -27,7 +27,8 @@ transform_form({module, Line, Name, Body}) ->
     {UseDirs, Rest1}    = lists:partition(fun({use_directive,_,_,_}) -> true; (_) -> false end, Body),
     {ImportDirs, Rest2} = lists:partition(fun({import_directive,_,_}) -> true; (_) -> false end, Rest1),
     {AliasDirs, Rest3}  = lists:partition(fun({alias_directive,_,_,_}) -> true; (_) -> false end, Rest2),
-    {SchemaDefs, Fns}   = lists:partition(fun({schema_def,_,_,_})    -> true; (_) -> false end, Rest3),
+    {StructDefs, Rest4} = lists:partition(fun({struct_def,_,_})        -> true; (_) -> false end, Rest3),
+    {SchemaDefs, Fns}   = lists:partition(fun({schema_def,_,_,_})    -> true; (_) -> false end, Rest4),
 
     %% Expand use directives.
     Expanded       = [expand_use(ULine, Mod, Sub, Name) || {use_directive, ULine, Mod, Sub} <- UseDirs],
@@ -35,7 +36,9 @@ transform_form({module, Line, Name, Body}) ->
                   ++ [Attr || {behaviour_only, Attr} <- Expanded],
     SyntheticFns   = [Fn   || {behaviour, _, Fn}   <- Expanded],
 
-    %% Expand schema defs into generated functions, then case-wrap pattern params.
+    %% Expand struct and schema defs into generated functions.
+    StructFns = [transform_function(F)
+                 || F <- lists:append([expand_struct_def(SD, Name) || SD <- StructDefs])],
     SchemaFns = [transform_function(F)
                  || F <- lists:append([expand_schema_def(SD) || SD <- SchemaDefs])],
 
@@ -44,7 +47,7 @@ transform_form({module, Line, Name, Body}) ->
 
     %% Transform and merge regular functions.
     Pass1  = [transform_function(F) || F <- ExpandedFns],
-    Merged = merge_fn_clauses(SchemaFns ++ Pass1),
+    Merged = merge_fn_clauses(StructFns ++ SchemaFns ++ Pass1),
 
     %% Apply import/alias rewrites.
     Imports  = [Mod || {import_directive, _, Mod} <- ImportDirs],
@@ -155,6 +158,41 @@ generate_default_wrappers(Line, Name, Required, Defaults) ->
         CallArgs = Required ++ ExplicitDefParams ++ RemainingVals,
         {function, Line, Name, WrapperParams, [{call, Line, Name, CallArgs}]}
      end || K <- lists:seq(0, NumDefaults - 1)].
+
+%% ── Struct definition expansion ──────────────────────────────────────────
+%% defstruct [:name, :email, :age] generates:
+%%   __struct__()  -> module atom (for type identification)
+%%   __fields__()  -> [:name, :email, :age]
+%%   new()         -> %{__struct__: ModName, name: nil, email: nil, age: nil}
+%%   new(attrs)    -> Map.merge(new(), attrs)
+
+expand_struct_def({struct_def, L, FieldNames}, ModName) ->
+    ModAtom = lower_module_atom(ModName),
+
+    %% __struct__() -> module atom
+    StructFn = {function, L, '__struct__', [],
+                [{atom, L, ModAtom}]},
+
+    %% __fields__() -> list of field atoms
+    FieldsFn = {function, L, '__fields__', [],
+                [{list, L, [{atom, L, F} || F <- FieldNames]}]},
+
+    %% Default map: %{__struct__: mod, field1: nil, field2: nil, ...}
+    DefaultPairs = [{'__struct__', {atom, L, ModAtom}}
+                   | [{F, {nil, L}} || F <- FieldNames]],
+
+    %% new() -> default map
+    New0Fn = {function, L, new, [],
+              [{map, L, DefaultPairs}]},
+
+    %% new(attrs) -> Map.merge(default, attrs)
+    New1Fn = {function, L, new, [{var, L, attrs}],
+              [{dot_call, L, 'Map', merge, [
+                  {map, L, DefaultPairs},
+                  {var, L, attrs}
+              ]}]},
+
+    [StructFn, FieldsFn, New0Fn, New1Fn].
 
 %% ── Schema definition expansion ──────────────────────────────────────────
 

@@ -33,6 +33,7 @@ Rules.
 %% Keywords — must appear before the identifier catch-all
 module                      : {token, {'module', TokenLine}}.
 def                         : {token, {'def', TokenLine}}.
+struct                      : {token, {'struct', TokenLine}}.
 do                          : {token, {'do', TokenLine}}.
 end                         : {token, {'end', TokenLine}}.
 match                       : {token, {'match', TokenLine}}.
