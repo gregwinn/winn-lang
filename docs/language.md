@@ -18,6 +18,38 @@ end
 
 Module names are capitalized. They compile to lowercase Erlang module atoms (`Greeter` → `:greeter`).
 
+### Import
+
+`import` brings a module's functions into scope as local calls:
+
+```winn
+module MyApp
+  import Enum
+
+  def run()
+    map([1,2,3]) do |x| x * 2 end    # instead of Enum.map(...)
+  end
+end
+```
+
+Local functions take priority — if you define a function with the same name as an imported one, your local version is called.
+
+### Alias
+
+`alias` lets you use a short name for a dotted module path:
+
+```winn
+module MyApp
+  alias MyApp.Auth
+
+  def run()
+    Auth.verify("token")    # instead of MyApp.Auth.verify(...)
+  end
+end
+```
+
+The short name is the last segment: `alias MyApp.Auth` makes `Auth` available.
+
 ## Functions
 
 Functions are defined with `def` and closed with `end`. The last expression in a function body is the return value.

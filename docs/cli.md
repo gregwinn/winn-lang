@@ -144,6 +144,122 @@ Use `winn start` for:
 
 ---
 
+### `winn test [file]`
+
+Run Winn tests.
+
+```sh
+# Run all tests in test/
+winn test
+
+# Run a specific test file
+winn test test/math_test.winn
+```
+
+Write tests using `use Winn.Test`:
+
+```winn
+module MathTest
+  use Winn.Test
+
+  def test_addition()
+    assert(1 + 1 == 2)
+  end
+
+  def test_string_equality()
+    result = "hello" <> " world"
+    assert_equal("hello world", result)
+  end
+end
+```
+
+**Assertions:**
+
+| Function | Description |
+|----------|-------------|
+| `assert(expr)` | Passes if `expr` is `true` |
+| `assert_equal(expected, actual)` | Passes if `expected =:= actual` |
+
+**How it works:**
+
+1. Compiles all `test/*.winn` files (and `src/*.winn` for project modules)
+2. Loads compiled beams into the VM
+3. Discovers functions named `test_*` in test modules
+4. Runs each test function, catches assertion failures
+5. Prints colorized pass/fail results with timing
+
+Exit code is 0 when all tests pass, 1 on any failure.
+
+---
+
+### `winn docs [file]`
+
+Generate API documentation with a module dependency graph.
+
+```sh
+# Generate docs for all src/*.winn files
+winn docs
+
+# Generate docs for a specific file
+winn docs src/api.winn
+```
+
+Output is written to `doc/api/`:
+
+```
+doc/api/
+├── index.md         # Module list + Mermaid dependency graph
+├── api.md           # Per-module API docs
+├── auth.md
+└── user.md
+```
+
+**Features:**
+
+- Extracts `#` doc comments before `def` and `module` declarations
+- Generates per-module Markdown files with function signatures
+- Builds a **Mermaid dependency graph** showing which modules call which (renders on GitHub)
+- Handles multi-clause functions
+- Skips stdlib modules (IO, Enum, String, etc.) in the graph
+
+---
+
+### `winn watch`
+
+Watch source files and hot-reload modules on change with a live terminal dashboard.
+
+```sh
+# Watch and recompile only
+winn watch
+
+# Watch + start the app (like winn start but with auto-reload)
+winn watch --start
+```
+
+The dashboard shows:
+
+```
+┌─ Winn Watch ─────────────────────────────────┐
+│ Watching src/ (3 modules)                     │
+│                                               │
+│  ✓ Api          reloaded 2s ago               │
+│  ✓ Auth         reloaded 14s ago              │
+│  ✗ User         compile error                 │
+│    └ line 12: undefined var `nam`             │
+│                                               │
+│ Reloads: 7  Errors: 1  Uptime: 2m 30s        │
+└───────────────────────────────────────────────┘
+```
+
+**Features:**
+- Polls `src/*.winn` every 500ms for changes
+- Hot-reloads changed modules via BEAM code swap (no restart needed)
+- Compile errors keep the last working version loaded
+- Live dashboard with per-module status, reload times, and error details
+- `--start` flag starts OTP apps and calls `main()` before watching
+
+---
+
 ### `winn deps`
 
 Manage project dependencies.

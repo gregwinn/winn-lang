@@ -2,6 +2,25 @@
 
 All notable changes to the Winn language are documented here.
 
+## [Unreleased]
+
+### Language Features
+- **`import Module`** — bring a module's functions into scope as local calls
+- **`alias Parent.Child`** — use a short name for a dotted module path
+
+### Testing Framework
+- **`winn test`** — run Winn tests from the CLI
+- **`use Winn.Test`**, **`assert(expr)`**, **`assert_equal(expected, actual)`**
+- Test discovery, colorized output, exit codes
+
+### Tooling
+- **`winn docs`** — generate Markdown API docs with Mermaid dependency graph
+- **`winn watch`** — file watcher with hot code reloading and live terminal dashboard
+- **`winn watch --start`** — watch mode + starts the app
+
+### Compiler
+- **`module_info/0` and `module_info/1`** — now generated for all compiled modules
+
 ## [0.2.0] - 2026-03-28
 
 ### Language Features
