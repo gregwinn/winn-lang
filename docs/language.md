@@ -472,6 +472,62 @@ module User
 end
 ```
 
+## Protocols
+
+Protocols define interfaces that multiple struct types can implement. Dispatch is based on the `__struct__` key at runtime.
+
+### Defining a Protocol
+
+```winn
+module Printable
+  protocol do
+    def to_s(value)
+      "unknown"
+    end
+  end
+end
+```
+
+### Implementing a Protocol
+
+Use `impl ProtocolName do ... end` inside a struct module:
+
+```winn
+module User
+  struct [:name, :email]
+
+  impl Printable do
+    def to_s(user)
+      "User(#{user.name})"
+    end
+  end
+end
+
+module Post
+  struct [:title]
+
+  impl Printable do
+    def to_s(post)
+      "Post: #{post.title}"
+    end
+  end
+end
+```
+
+### Using Protocols
+
+Call the protocol function — dispatch happens automatically based on the struct type:
+
+```winn
+user = User.new(%{name: "Alice"})
+post = Post.new(%{title: "Hello World"})
+
+Printable.to_s(user)   # => "User(Alice)"
+Printable.to_s(post)   # => "Post: Hello World"
+```
+
+Protocol implementations are registered at module load time. Multiple struct types can implement the same protocol.
+
 ## Standalone Lambdas
 
 Create anonymous functions with `fn(params) => body end`:
