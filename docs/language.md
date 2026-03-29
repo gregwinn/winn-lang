@@ -102,6 +102,33 @@ module Math
 end
 ```
 
+### Default Parameter Values
+
+Parameters can have default values. When called with fewer arguments, defaults are filled in:
+
+```winn
+def greet(name, greeting = "Hello")
+  "#{greeting}, #{name}!"
+end
+
+greet("Alice")          # => "Hello, Alice!"
+greet("Alice", "Hi")    # => "Hi, Alice!"
+```
+
+Multiple defaults are supported — they must come after required parameters:
+
+```winn
+def connect(host, port = 5432, timeout = 5000)
+  # ...
+end
+
+connect("localhost")             # port=5432, timeout=5000
+connect("localhost", 3306)       # timeout=5000
+connect("localhost", 3306, 10000)
+```
+
+Defaults can be strings, integers, floats, atoms, and booleans.
+
 ### Multi-clause Functions
 
 Define multiple clauses for pattern-based dispatch:
