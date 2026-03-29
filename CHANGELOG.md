@@ -4,6 +4,10 @@ All notable changes to the Winn language are documented here.
 
 ## [Unreleased]
 
+### Language Features
+- **`import Module`** — bring a module's functions into scope as local calls (e.g., `import Enum` lets you write `map(list)` instead of `Enum.map(list)`)
+- **`alias Parent.Child`** — use a short name for a dotted module path (e.g., `alias MyApp.Auth` lets you write `Auth.verify()`)
+
 ### Testing Framework
 - **`winn test`** — run Winn tests from the CLI (`winn test` or `winn test <file>`)
 - **`use Winn.Test`** — marks a module as a test module
