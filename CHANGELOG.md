@@ -2,7 +2,7 @@
 
 All notable changes to the Winn language are documented here.
 
-## [Unreleased]
+## [0.3.0] - 2026-03-28
 
 ### Language Features
 - **`import Module`** — bring a module's functions into scope as local calls
