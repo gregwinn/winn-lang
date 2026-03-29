@@ -2,6 +2,12 @@
 
 All notable changes to the Winn language are documented here.
 
+## [Unreleased]
+
+### Tooling
+- **`winn docs`** — generate Markdown API docs from source code with doc comment extraction
+- **Mermaid dependency graph** — `winn docs` generates a module dependency diagram that renders natively on GitHub
+
 ## [0.2.0] - 2026-03-28
 
 ### Language Features
