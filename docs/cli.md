@@ -192,6 +192,38 @@ Exit code is 0 when all tests pass, 1 on any failure.
 
 ---
 
+### `winn docs [file]`
+
+Generate API documentation with a module dependency graph.
+
+```sh
+# Generate docs for all src/*.winn files
+winn docs
+
+# Generate docs for a specific file
+winn docs src/api.winn
+```
+
+Output is written to `doc/api/`:
+
+```
+doc/api/
+├── index.md         # Module list + Mermaid dependency graph
+├── api.md           # Per-module API docs
+├── auth.md
+└── user.md
+```
+
+**Features:**
+
+- Extracts `#` doc comments before `def` and `module` declarations
+- Generates per-module Markdown files with function signatures
+- Builds a **Mermaid dependency graph** showing which modules call which (renders on GitHub)
+- Handles multi-clause functions
+- Skips stdlib modules (IO, Enum, String, etc.) in the graph
+
+---
+
 ### `winn deps`
 
 Manage project dependencies.

@@ -18,6 +18,10 @@ All notable changes to the Winn language are documented here.
 - Compiles `src/` before tests so project modules are available
 - Exit code 0 on all pass, 1 on any failure
 
+### Tooling
+- **`winn docs`** — generate Markdown API docs from source code with doc comment extraction
+- **Mermaid dependency graph** — `winn docs` generates a module dependency diagram that renders natively on GitHub
+
 ### Compiler
 - **`module_info/0` and `module_info/1`** — now generated for all compiled modules (fixes Core Erlang gap)
 

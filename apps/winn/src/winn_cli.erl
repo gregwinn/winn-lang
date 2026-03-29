@@ -42,6 +42,9 @@ main(Args) ->
         {test, TestArgs} ->
             run_tests(TestArgs);
 
+        {docs, DocsArgs} ->
+            run_docs(DocsArgs);
+
         {deps, Sub} ->
             Result = run_deps(Sub),
             case Result of
@@ -72,6 +75,8 @@ parse_args(["start" | Args])       -> {start, Args};
 parse_args(["console" | _])        -> console;
 parse_args(["test"])                -> {test, []};
 parse_args(["test" | Args])        -> {test, Args};
+parse_args(["docs"])                -> {docs, []};
+parse_args(["docs" | Args])        -> {docs, Args};
 parse_args(["deps" | Sub])         -> {deps, Sub};
 parse_args(["version" | _])        -> version;
 parse_args(["-v" | _])             -> version;
@@ -386,6 +391,30 @@ load_test_beams(Dir, _Compiled) ->
         end
     end, Beams).
 
+%% ── Docs generator ──────────────────────────────────────────────────────
+
+run_docs(Args) ->
+    Files = find_doc_files(Args),
+    case Files of
+        [] ->
+            io:format("No .winn files found.~n"),
+            halt(1);
+        _ ->
+            OutDir = "doc/api",
+            case winn_docs:generate(Files, OutDir) of
+                ok    -> halt(0);
+                {error, _} -> halt(1)
+            end
+    end.
+
+find_doc_files([]) ->
+    case filelib:is_dir("src") of
+        true  -> filelib:wildcard("src/*.winn");
+        false -> filelib:wildcard("*.winn")
+    end;
+find_doc_files(Paths) ->
+    lists:filter(fun filelib:is_file/1, Paths).
+
 %% ── Deps subcommand ─────────────────────────────────────────────────────
 
 run_deps(["list"])              -> winn_deps:list();
@@ -438,6 +467,8 @@ print_usage() ->
         "  winn start <module>     Start with a specific module~n"
         "  winn test               Run all tests in test/~n"
         "  winn test <file>        Run a specific test file~n"
+        "  winn docs               Generate API docs with dependency graph~n"
+        "  winn docs <file>        Generate docs for a single file~n"
         "  winn deps               Manage dependencies~n"
         "  winn console            Interactive console~n"
         "  winn version            Show version~n"
