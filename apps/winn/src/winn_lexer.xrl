@@ -87,6 +87,8 @@ preload                     : {token, {'preload', TokenLine}}.
 {UC}{AN}*                   : {token, {module_name, TokenLine, list_to_atom(TokenChars)}}.
 
 %% Lowercase/underscore identifier = variable or local function call
+%% Allows trailing ? for predicate functions (contains?, valid?, etc.)
+{A}{AN}*\?                  : {token, {ident, TokenLine, list_to_atom(TokenChars)}}.
 {A}{AN}*                    : {token, {ident, TokenLine, list_to_atom(TokenChars)}}.
 
 %% Single-character comparison operators
