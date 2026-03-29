@@ -28,7 +28,9 @@ transform_form({module, Line, Name, Body}) ->
     {ImportDirs, Rest2} = lists:partition(fun({import_directive,_,_}) -> true; (_) -> false end, Rest1),
     {AliasDirs, Rest3}  = lists:partition(fun({alias_directive,_,_,_}) -> true; (_) -> false end, Rest2),
     {StructDefs, Rest4} = lists:partition(fun({struct_def,_,_})        -> true; (_) -> false end, Rest3),
-    {SchemaDefs, Fns}   = lists:partition(fun({schema_def,_,_,_})    -> true; (_) -> false end, Rest4),
+    {ProtocolDefs, Rest5} = lists:partition(fun({protocol_def,_,_})  -> true; (_) -> false end, Rest4),
+    {ImplDefs, Rest6}   = lists:partition(fun({impl_def,_,_,_})      -> true; (_) -> false end, Rest5),
+    {SchemaDefs, Fns}   = lists:partition(fun({schema_def,_,_,_})    -> true; (_) -> false end, Rest6),
 
     %% Expand use directives.
     Expanded       = [expand_use(ULine, Mod, Sub, Name) || {use_directive, ULine, Mod, Sub} <- UseDirs],
@@ -36,9 +38,13 @@ transform_form({module, Line, Name, Body}) ->
                   ++ [Attr || {behaviour_only, Attr} <- Expanded],
     SyntheticFns   = [Fn   || {behaviour, _, Fn}   <- Expanded],
 
-    %% Expand struct and schema defs into generated functions.
+    %% Expand struct, protocol, impl, and schema defs into generated functions.
     StructFns = [transform_function(F)
                  || F <- lists:append([expand_struct_def(SD, Name) || SD <- StructDefs])],
+    ProtocolFns = [transform_function(F)
+                   || F <- lists:append([expand_protocol_def(PD, Name) || PD <- ProtocolDefs])],
+    ImplFns = [transform_function(F)
+               || F <- lists:append([expand_impl_def(ID, Name) || ID <- ImplDefs])],
     SchemaFns = [transform_function(F)
                  || F <- lists:append([expand_schema_def(SD) || SD <- SchemaDefs])],
 
@@ -47,7 +53,7 @@ transform_form({module, Line, Name, Body}) ->
 
     %% Transform and merge regular functions.
     Pass1  = [transform_function(F) || F <- ExpandedFns],
-    Merged = merge_fn_clauses(StructFns ++ SchemaFns ++ Pass1),
+    Merged = merge_fn_clauses(StructFns ++ ProtocolFns ++ ImplFns ++ SchemaFns ++ Pass1),
 
     %% Apply import/alias rewrites.
     Imports  = [Mod || {import_directive, _, Mod} <- ImportDirs],
@@ -193,6 +199,71 @@ expand_struct_def({struct_def, L, FieldNames}, ModName) ->
               ]}]},
 
     [StructFn, FieldsFn, New0Fn, New1Fn].
+
+%% ── Protocol definition expansion ────────────────────────────────────────
+%% protocol do
+%%   def to_s(value)
+%%     ...
+%%   end
+%% end
+%%
+%% Generates dispatch functions:
+%%   to_s(value) -> winn_protocol:dispatch(protocol_name, to_s, [value])
+
+expand_protocol_def({protocol_def, L, MethodDefs}, ModName) ->
+    ProtocolAtom = lower_module_atom(ModName),
+    [begin
+        Arity = length(Params),
+        DispatchArgs = {list, L, [{var, L, P} || {var, _, P} <- Params]},
+        {function, L, FnName, Params,
+         [{dot_call, L, 'Protocol', dispatch, [
+             {atom, L, ProtocolAtom},
+             {atom, L, FnName},
+             DispatchArgs
+         ]}]}
+     end || {function, _, FnName, Params, _} <- MethodDefs,
+            Arity <- [length(Params)],
+            Arity > 0].
+
+%% ── Implementation definition expansion ─────────────────────────────────
+%% impl Printable do
+%%   def to_s(user)
+%%     "User(#{user.name})"
+%%   end
+%% end
+%%
+%% Generates:
+%%   '__impl_printable_to_s'/1 — the actual implementation
+%%   '__register_impls__'/0 — registers all impls in ETS (called at load time)
+
+expand_impl_def({impl_def, L, ProtocolName, MethodDefs}, ModName) ->
+    ProtocolAtom = lower_module_atom(ProtocolName),
+    StructAtom = lower_module_atom(ModName),
+    ModAtom = lower_module_atom(ModName),
+
+    %% Generate implementation functions with mangled names
+    ImplFns = [begin
+        ImplName = list_to_atom("__impl_" ++ atom_to_list(ProtocolAtom)
+                                ++ "_" ++ atom_to_list(FnName)),
+        {function, L, ImplName, Params, Body}
+    end || {function, _, FnName, Params, Body} <- MethodDefs],
+
+    %% Generate registration function
+    RegCalls = [begin
+        ImplName = list_to_atom("__impl_" ++ atom_to_list(ProtocolAtom)
+                                ++ "_" ++ atom_to_list(FnName)),
+        {dot_call, L, 'Protocol', register_impl, [
+            {atom, L, ProtocolAtom},
+            {atom, L, FnName},
+            {atom, L, StructAtom},
+            {tuple, L, [{atom, L, ModAtom}, {atom, L, ImplName}]}
+        ]}
+    end || {function, _, FnName, _, _} <- MethodDefs],
+
+    RegFn = {function, L, '__register_impls__', [],
+             RegCalls ++ [{atom, L, ok}]},
+
+    ImplFns ++ [RegFn].
 
 %% ── Schema definition expansion ──────────────────────────────────────────
 

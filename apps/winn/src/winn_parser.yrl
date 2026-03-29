@@ -17,7 +17,7 @@ Nonterminals
     top_forms top_form
     module_def module_body dotted_name
     use_directive import_directive alias_directive
-    function_def struct_def struct_fields param_list pattern_list
+    function_def struct_def struct_fields protocol_def impl_def protocol_fns param_list pattern_list
     expr_seq
     expr
     pipe_expr or_expr and_expr not_expr
@@ -37,7 +37,7 @@ Nonterminals
 
 %% Phase 1 terminals + Phase 2 additions.
 Terminals
-    'module' 'def' 'struct' 'do' 'end' 'use' 'import' 'alias' 'schema' 'field'
+    'module' 'def' 'struct' 'protocol' 'impl' 'do' 'end' 'use' 'import' 'alias' 'schema' 'field'
     'match' 'ok_kw' 'err_kw' 'nil_kw'
     'if' 'else' 'switch' 'when' 'try' 'rescue'
     'fn' 'for' 'in'
@@ -81,6 +81,8 @@ module_body -> import_directive module_body : ['$1' | '$2'].
 module_body -> alias_directive module_body : ['$1' | '$2'].
 module_body -> schema_def module_body : ['$1' | '$2'].
 module_body -> struct_def module_body : ['$1' | '$2'].
+module_body -> protocol_def module_body : ['$1' | '$2'].
+module_body -> impl_def module_body : ['$1' | '$2'].
 
 %% ── Use directive ────────────────────────────────────────────────────────────
 
@@ -106,6 +108,21 @@ struct_fields -> atom_lit
     : [val('$1')].
 struct_fields -> atom_lit ',' struct_fields
     : [val('$1') | '$3'].
+
+%% ── Protocol definition ───────────────────────────────────────────────────────
+
+protocol_def -> 'protocol' 'do' protocol_fns 'end'
+    : {protocol_def, line('$1'), '$3'}.
+
+protocol_fns -> function_def
+    : ['$1'].
+protocol_fns -> function_def protocol_fns
+    : ['$1' | '$2'].
+
+%% ── Implementation definition ────────────────────────────────────────────────
+
+impl_def -> 'impl' module_name 'do' protocol_fns 'end'
+    : {impl_def, line('$1'), val('$2'), '$4'}.
 
 %% ── Function ───────────────────────────────────────────────────────────────
 
