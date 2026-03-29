@@ -17,7 +17,7 @@ Nonterminals
     top_forms top_form
     module_def module_body dotted_name
     use_directive import_directive alias_directive
-    function_def param_list pattern_list
+    function_def struct_def struct_fields param_list pattern_list
     expr_seq
     expr
     pipe_expr or_expr and_expr not_expr
@@ -37,7 +37,7 @@ Nonterminals
 
 %% Phase 1 terminals + Phase 2 additions.
 Terminals
-    'module' 'def' 'do' 'end' 'use' 'import' 'alias' 'schema' 'field'
+    'module' 'def' 'struct' 'do' 'end' 'use' 'import' 'alias' 'schema' 'field'
     'match' 'ok_kw' 'err_kw' 'nil_kw'
     'if' 'else' 'switch' 'when' 'try' 'rescue'
     'fn' 'for' 'in'
@@ -80,6 +80,7 @@ module_body -> use_directive module_body : ['$1' | '$2'].
 module_body -> import_directive module_body : ['$1' | '$2'].
 module_body -> alias_directive module_body : ['$1' | '$2'].
 module_body -> schema_def module_body : ['$1' | '$2'].
+module_body -> struct_def module_body : ['$1' | '$2'].
 
 %% ── Use directive ────────────────────────────────────────────────────────────
 
@@ -95,6 +96,16 @@ import_directive -> 'import' module_name
 
 alias_directive -> 'alias' module_name '.' module_name
     : {alias_directive, line('$1'), val('$2'), val('$4')}.
+
+%% ── Struct definition ─────────────────────────────────────────────────────────
+
+struct_def -> 'struct' '[' struct_fields ']'
+    : {struct_def, line('$1'), '$3'}.
+
+struct_fields -> atom_lit
+    : [val('$1')].
+struct_fields -> atom_lit ',' struct_fields
+    : [val('$1') | '$3'].
 
 %% ── Function ───────────────────────────────────────────────────────────────
 

@@ -438,6 +438,40 @@ html = """
 
 Triple-quoted strings support interpolation (`#{}`) just like regular strings.
 
+## Structs
+
+Define named struct types with `struct`:
+
+```winn
+module User
+  struct [:name, :email, :age]
+end
+```
+
+This generates:
+- `User.new()` — returns a map with all fields set to `nil` and a `__struct__` key
+- `User.new(%{name: "Alice", age: 30})` — merges attributes into the default map
+- `User.__struct__()` — returns the module atom (for type identification)
+- `User.__fields__()` — returns the list of field names
+
+```winn
+user = User.new(%{name: "Alice", age: 30})
+user.name        # => "Alice"
+user.__struct__  # => :user
+```
+
+Structs are maps with a `__struct__` key, so all Map functions work on them. You can define methods alongside the struct:
+
+```winn
+module User
+  struct [:name, :email]
+
+  def greet(user)
+    "Hello, #{user.name}!"
+  end
+end
+```
+
 ## Standalone Lambdas
 
 Create anonymous functions with `fn(params) => body end`:
