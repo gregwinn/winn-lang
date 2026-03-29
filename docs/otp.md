@@ -158,6 +158,28 @@ end
 
 ---
 
+## Test (use Winn.Test)
+
+Define test modules with `use Winn.Test`:
+
+```winn
+module UserTest
+  use Winn.Test
+
+  def test_create()
+    assert(1 + 1 == 2)
+  end
+
+  def test_equality()
+    assert_equal("hello", "hello")
+  end
+end
+```
+
+`use Winn.Test` adds `-behaviour(winn_test)`. Test functions must be named `test_*`. Run with `winn test`. See [CLI Reference](cli.md#winn-test-file) and [Standard Library](stdlib.md#testing) for details.
+
+---
+
 ## Calling OTP Functions
 
 Use `GenServer` and `Supervisor` module calls from Winn:

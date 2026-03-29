@@ -24,6 +24,10 @@ Winn is a Ruby/Elixir-inspired language that compiles to the BEAM (Erlang VM). I
 - **Crypto** — hashing, HMAC, random bytes, base64
 - **JSON** — `JSON.encode/decode`
 - **Config** — ETS-backed config with `Config.get/put/load`
+- **Testing framework** — `winn test` with `assert`/`assert_equal`, test discovery
+- **Import/alias** — `import Enum` for unqualified calls, `alias MyApp.Auth` for short names
+- **Doc generator** — `winn docs` generates Markdown API docs with Mermaid dependency graphs
+- **File watcher** — `winn watch` with hot code reloading and live terminal dashboard
 - **Clear error messages** — source context, caret pointers, hints
 - **Compiles to BEAM** — runs on the battle-tested Erlang virtual machine
 
@@ -51,7 +55,7 @@ cp _build/default/bin/winn /usr/local/bin/
 
 ```sh
 winn version
-# => winn 0.2.0
+# => winn 0.3.2
 ```
 
 ## Quick Start
@@ -184,9 +188,12 @@ language-winn/
 │   ├── winn_config.erl      # ETS-backed configuration
 │   ├── winn_repo.erl        # ORM database layer
 │   ├── winn_changeset.erl   # changeset validation
-│   ├── winn_cli.erl         # CLI escript (new/compile/run/start/version/help)
+│   ├── winn_test.erl        # testing framework (assert, test runner)
+│   ├── winn_docs.erl        # documentation generator + Mermaid graphs
+│   ├── winn_watch.erl       # file watcher with live terminal dashboard
+│   ├── winn_cli.erl         # CLI escript (new/compile/run/start/test/docs/watch/version/help)
 │   └── winn.erl             # public API
-├── apps/winn/test/           # 294 tests across 22 test files
+├── apps/winn/test/           # 360 tests across 26 test files
 └── docs/
     ├── getting-started.md    # install, create, build, run
     ├── language.md           # syntax reference

@@ -447,6 +447,69 @@ If you're using the VS Code extension, errors show as red squigglies inline.
 
 ---
 
+## 14. Testing
+
+Write tests in Winn using `use Winn.Test`:
+
+```winn
+module MathTest
+  use Winn.Test
+
+  def test_addition()
+    assert(1 + 1 == 2)
+  end
+
+  def test_greeting()
+    result = "Hello, " <> "World"
+    assert_equal("Hello, World", result)
+  end
+end
+```
+
+Save as `test/math_test.winn` and run:
+
+```sh
+winn test
+```
+
+Output:
+
+```
+  ✓ mathtest:test_addition
+  ✓ mathtest:test_greeting
+
+2 tests, 0 failures (0ms)
+```
+
+Test functions must be named `test_*` with zero arguments. Use `assert(expr)` for boolean checks and `assert_equal(expected, actual)` for value comparisons.
+
+---
+
+## 15. Generating Documentation
+
+Generate API docs from your source with `winn docs`:
+
+```sh
+winn docs
+# => Generated docs for 3 module(s) in doc/api/
+```
+
+This creates Markdown files in `doc/api/` with function signatures extracted from `#` doc comments, plus a **Mermaid dependency graph** in `index.md` that renders on GitHub.
+
+---
+
+## 16. Watch Mode
+
+Use `winn watch` for automatic recompilation and hot code reloading during development:
+
+```sh
+winn watch --start
+```
+
+This starts your app and shows a live terminal dashboard. When you edit a `.winn` file, the module is recompiled and hot-reloaded without restarting the VM.
+
+---
+
 ## Next Steps
 
 - [Language Guide](language.md) — full syntax reference

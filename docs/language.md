@@ -18,6 +18,29 @@ end
 
 Module names are capitalized. They compile to lowercase Erlang module atoms (`Greeter` → `:greeter`).
 
+### Dotted Module Names
+
+Modules can use dotted names for hierarchical organization:
+
+```winn
+module MyApp.Router
+  def routes()
+    [{:get, "/", :index}]
+  end
+end
+```
+
+Dotted names compile to dotted atoms (`MyApp.Router` → `:'myapp.router'`).
+
+### Module References as Values
+
+Module names can be passed as values to functions. They compile to lowercase atoms matching the compiled module name:
+
+```winn
+Repo.insert(Post, changeset)    # Post becomes the atom :post
+Repo.all(Contact)               # Contact becomes :contact
+```
+
 ### Import
 
 `import` brings a module's functions into scope as local calls:
@@ -53,6 +76,19 @@ The short name is the last segment: `alias MyApp.Auth` makes `Auth` available.
 ## Functions
 
 Functions are defined with `def` and closed with `end`. The last expression in a function body is the return value.
+
+Function names can end with `?` for predicates:
+
+```winn
+def valid?(changeset)
+  Changeset.valid(changeset)
+end
+
+# Standard library predicates:
+List.contains?(2, [1, 2, 3])    # => true
+Map.has_key?(user, :name)       # => true
+Enum.any?([1, 2, 3]) do |x| x > 2 end  # => true
+```
 
 ```winn
 module Math
