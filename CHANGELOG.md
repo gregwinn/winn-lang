@@ -5,25 +5,21 @@ All notable changes to the Winn language are documented here.
 ## [Unreleased]
 
 ### Language Features
-- **`import Module`** — bring a module's functions into scope as local calls (e.g., `import Enum` lets you write `map(list)` instead of `Enum.map(list)`)
-- **`alias Parent.Child`** — use a short name for a dotted module path (e.g., `alias MyApp.Auth` lets you write `Auth.verify()`)
+- **`import Module`** — bring a module's functions into scope as local calls
+- **`alias Parent.Child`** — use a short name for a dotted module path
 
 ### Testing Framework
-- **`winn test`** — run Winn tests from the CLI (`winn test` or `winn test <file>`)
-- **`use Winn.Test`** — marks a module as a test module
-- **`assert(expr)`** — assert a condition is true
-- **`assert_equal(expected, actual)`** — assert two values are strictly equal
-- Test discovery finds `test_*` functions automatically
-- Colorized pass/fail output with timing
-- Compiles `src/` before tests so project modules are available
-- Exit code 0 on all pass, 1 on any failure
+- **`winn test`** — run Winn tests from the CLI
+- **`use Winn.Test`**, **`assert(expr)`**, **`assert_equal(expected, actual)`**
+- Test discovery, colorized output, exit codes
 
 ### Tooling
-- **`winn docs`** — generate Markdown API docs from source code with doc comment extraction
-- **Mermaid dependency graph** — `winn docs` generates a module dependency diagram that renders natively on GitHub
+- **`winn docs`** — generate Markdown API docs with Mermaid dependency graph
+- **`winn watch`** — file watcher with hot code reloading and live terminal dashboard
+- **`winn watch --start`** — watch mode + starts the app
 
 ### Compiler
-- **`module_info/0` and `module_info/1`** — now generated for all compiled modules (fixes Core Erlang gap)
+- **`module_info/0` and `module_info/1`** — now generated for all compiled modules
 
 ## [0.2.0] - 2026-03-28
 
