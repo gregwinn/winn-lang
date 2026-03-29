@@ -1,16 +1,41 @@
 -module(winn_repo).
 -export([
-    insert/2, get/2, get/3, all/1, all/2,
-    delete/1, update/1,
+    configure/1, insert/2, get/2, get/3, all/1, all/2,
+    delete/1, update/1, execute/1, execute/2,
     'query.new'/1, 'query.where'/3, 'query.limit'/2,
     sql_for_insert/2, sql_for_select/2
 ]).
 
+%% Configure the database connection from Winn:
+%%   Repo.configure(%{host: "localhost", database: "my_app", ...})
+configure(Config) when is_map(Config) ->
+    winn_config:ensure_init(),
+    maps:fold(fun(Key, Val, _) ->
+        winn_config:put(repo, Key, Val)
+    end, ok, Config),
+    ok.
+
 db_config() ->
-    application:get_env(winn, repo_config, #{
+    %% Read from Config ETS first, fall back to application env, then defaults.
+    Defaults = #{
         host => "localhost", port => 5432,
         database => "winn_dev", username => "postgres", password => ""
-    }).
+    },
+    AppConfig = case application:get_env(winn, repo_config) of
+        {ok, C} -> C;
+        undefined -> #{}
+    end,
+    EtsConfig = read_ets_config(),
+    maps:merge(maps:merge(Defaults, AppConfig), EtsConfig).
+
+read_ets_config() ->
+    Keys = [host, port, database, username, password],
+    lists:foldl(fun(Key, Acc) ->
+        case winn_config:get(repo, Key) of
+            nil -> Acc;
+            Val -> maps:put(Key, Val, Acc)
+        end
+    end, #{}, Keys).
 
 connect() ->
     #{host := Host, port := Port, database := DB,
@@ -147,6 +172,19 @@ update(#{id := Id} = Struct) ->
                 end
             end)
     end.
+
+%% Raw SQL execution
+execute(SQL) when is_binary(SQL) ->
+    execute(SQL, []).
+
+execute(SQL, Params) when is_binary(SQL), is_list(Params) ->
+    with_conn(fun(Conn) ->
+        case epgsql:equery(Conn, binary_to_list(SQL), Params) of
+            {ok, _Cols, Rows}  -> {ok, Rows};
+            {ok, Count}        -> {ok, Count};
+            {error, Reason}    -> {error, Reason}
+        end
+    end).
 
 with_conn(Fun) ->
     case connect() of

@@ -4,17 +4,39 @@ Winn includes a built-in ORM for PostgreSQL backed by [epgsql](https://github.co
 
 ## Configuration
 
-Configure the database connection in your application environment:
+Configure the database connection from Winn using `Repo.configure`:
 
-```erlang
-%% In your Erlang app config or rebar3 shell
-application:set_env(winn, repo_config, #{
-    host     => "localhost",
-    port     => 5432,
-    database => "my_app_dev",
-    username => "postgres",
-    password => "secret"
-}).
+```winn
+module MyApp
+  def main()
+    Repo.configure(%{
+      host: "localhost",
+      port: 5432,
+      database: "my_app_dev",
+      username: "postgres",
+      password: "secret"
+    })
+
+    # Now Repo.insert, Repo.all, etc. use this connection
+  end
+end
+```
+
+Call `Repo.configure` early in your app (e.g., in `main()`) before any database operations. Configuration is stored in the Config ETS table and persists for the lifetime of the VM.
+
+You can also configure individual keys:
+
+```winn
+Repo.configure(%{database: "my_app_test"})
+```
+
+### Raw SQL
+
+Execute raw SQL queries with `Repo.execute`:
+
+```winn
+Repo.execute("CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT)")
+Repo.execute("SELECT * FROM users WHERE age > $1", [18])
 ```
 
 ---
