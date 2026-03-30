@@ -12,10 +12,13 @@ lex(Src) ->
 %% ── Whitespace and comments ───────────────────────────────────────────────
 
 whitespace_skipped_test() ->
-    ?assertEqual([], lex("   \t\n\r  ")).
+    ?assertEqual([], lex("   \t\r  ")).
+
+whitespace_newline_emits_token_test() ->
+    ?assertMatch([{newline, _}], lex("\n")).
 
 comment_skipped_test() ->
-    ?assertEqual([], lex("# this is a comment\n")).
+    ?assertEqual([{newline, 1}], lex("# this is a comment\n")).
 
 comment_inline_test() ->
     Tokens = lex("42 # comment"),

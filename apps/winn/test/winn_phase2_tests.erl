@@ -6,7 +6,7 @@
 
 %% Helpers
 lex(Src) ->
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     Tokens.
 
 parse(Src) ->

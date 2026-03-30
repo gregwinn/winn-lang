@@ -10,6 +10,7 @@ All notable changes to the Winn language are documented here.
 - **Default parameter values** — `def greet(name, greeting = "Hello")` with multiple arities generated
 - **Struct types** — `struct [:name, :email]` generates `new/0`, `new/1`, `__struct__/0`, `__fields__/0`
 - **Protocols** — `protocol do ... end` defines interfaces, `impl ProtocolName do ... end` implements them for struct types with runtime ETS dispatch
+- **Significant newlines** — multi-expression switch/rescue clause bodies without `do...end` wrappers (backward compatible)
 
 ## [0.3.0] - 2026-03-28
 

@@ -6,7 +6,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -18,12 +19,12 @@ compile_and_load(Source) ->
 %% ── String Interpolation ────────────────────────────────────────────────
 
 interp_lex_test() ->
-    {ok, Tokens, _} = winn_lexer:string("\"Hello, #{name}!\""),
+    {ok, RawTok_, _} = winn_lexer:string("\"Hello, #{name}!\""), Tokens = winn_newline_filter:filter(RawTok_),
     ?assertMatch([{interp_string, _, [{str, <<"Hello, ">>}, {expr, "name"}, {str, <<"!">>}]}], Tokens).
 
 interp_plain_string_test() ->
     %% No interpolation — should be a regular string_lit.
-    {ok, Tokens, _} = winn_lexer:string("\"Hello, World!\""),
+    {ok, RawTok_, _} = winn_lexer:string("\"Hello, World!\""), Tokens = winn_newline_filter:filter(RawTok_),
     ?assertMatch([{string_lit, _, <<"Hello, World!">>}], Tokens).
 
 interp_e2e_test() ->
@@ -43,7 +44,7 @@ interp_multiple_test() ->
 
 interp_escaped_test() ->
     %% \#{} should NOT interpolate (backslash escapes the #).
-    {ok, Tokens, _} = winn_lexer:string("\"Hello, \\#{name}\""),
+    {ok, RawTok_, _} = winn_lexer:string("\"Hello, \\#{name}\""), Tokens = winn_newline_filter:filter(RawTok_),
     %% The backslash is preserved by the lexer's unescape — \# isn't a standard
     %% escape sequence, so it passes through as \#. The key point is no interpolation.
     ?assertMatch([{string_lit, _, _}], Tokens).
@@ -52,7 +53,7 @@ interp_escaped_test() ->
 
 field_access_parse_test() ->
     Src = "module FaTest\n  def get_name(user)\n    user.name\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, _AST} = winn_parser:parse(Tokens).
 
 field_access_e2e_test() ->
@@ -69,7 +70,7 @@ field_access_nested_test() ->
 
 lambda_parse_test() ->
     Src = "module LamTest\n  def run()\n    f = fn(x) => x * 2 end\n    f(5)\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, _AST} = winn_parser:parse(Tokens).
 
 lambda_e2e_test() ->
@@ -95,7 +96,7 @@ lambda_multi_args_test() ->
 
 pat_assign_parse_test() ->
     Src = "module PatTest\n  def run()\n    {:ok, x} = {:ok, 42}\n    x\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, _AST} = winn_parser:parse(Tokens).
 
 pat_assign_e2e_test() ->
@@ -146,7 +147,7 @@ json_decode_e2e_test() ->
 
 for_parse_test() ->
     Src = "module ForTest\n  def run(list)\n    for x in list do x * 2 end\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, _AST} = winn_parser:parse(Tokens).
 
 for_e2e_test() ->

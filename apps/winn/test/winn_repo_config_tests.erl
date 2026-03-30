@@ -56,7 +56,8 @@ configure_from_winn_test() ->
              "    Repo.configure(%{host: \"myhost\", database: \"mydb\"})\n"
              "  end\n"
              "end\n",
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),

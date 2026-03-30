@@ -5,7 +5,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -24,7 +25,8 @@ protocol_parses_test() ->
              "    end\n"
              "  end\n"
              "end\n",
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, [{module, _, 'Proto1', Body}]} = winn_parser:parse(Tokens),
     Protos = [P || {protocol_def, _, _} = P <- Body],
     ?assertEqual(1, length(Protos)).
@@ -38,7 +40,8 @@ impl_parses_test() ->
              "    end\n"
              "  end\n"
              "end\n",
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, [{module, _, 'ImplTest', Body}]} = winn_parser:parse(Tokens),
     Impls = [I || {impl_def, _, _, _} = I <- Body],
     ?assertMatch([{impl_def, _, 'MyProto', _}], Impls).

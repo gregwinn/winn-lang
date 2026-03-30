@@ -5,7 +5,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -18,7 +19,8 @@ compile_and_load(Source) ->
 
 struct_parses_test() ->
     Source = "module Pt\n  struct [:name, :age]\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, [{module, _, 'Pt', Body}]} = winn_parser:parse(Tokens),
     ?assertMatch([{struct_def, _, [name, age]}], [S || {struct_def, _, _} = S <- Body]).
 

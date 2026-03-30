@@ -5,7 +5,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -17,7 +18,7 @@ compile_and_load(Source) ->
 %% ── Pipe assign (|>=) ───────────────────────────────────────────────────────
 
 pipe_assign_lexer_test() ->
-    {ok, Tokens, _} = winn_lexer:string("x |>= y"),
+    {ok, RawTok_, _} = winn_lexer:string("x |>= y"), Tokens = winn_newline_filter:filter(RawTok_),
     ?assertMatch([{ident,_,x}, {'|>=',_}, {ident,_,y}], Tokens).
 
 pipe_assign_simple_test() ->
@@ -46,15 +47,15 @@ pipe_assign_in_chain_test() ->
 %% ── Triple-quoted strings ───────────────────────────────────────────────────
 
 triple_string_simple_test() ->
-    {ok, Tokens, _} = winn_lexer:string("\"\"\"hello world\"\"\""),
+    {ok, RawTok_, _} = winn_lexer:string("\"\"\"hello world\"\"\""), Tokens = winn_newline_filter:filter(RawTok_),
     ?assertMatch([{string_lit, _, <<"hello world">>}], Tokens).
 
 triple_string_embedded_quotes_test() ->
-    {ok, Tokens, _} = winn_lexer:string("\"\"\"say \"hello\" world\"\"\""),
+    {ok, RawTok_, _} = winn_lexer:string("\"\"\"say \"hello\" world\"\"\""), Tokens = winn_newline_filter:filter(RawTok_),
     ?assertMatch([{string_lit, _, <<"say \"hello\" world">>}], Tokens).
 
 triple_string_multiline_dedent_test() ->
-    {ok, Tokens, _} = winn_lexer:string("\"\"\"\n  line one\n  line two\n\"\"\""),
+    {ok, RawTok_, _} = winn_lexer:string("\"\"\"\n  line one\n  line two\n\"\"\""), Tokens = winn_newline_filter:filter(RawTok_),
     ?assertMatch([{string_lit, _, <<"line one\nline two">>}], Tokens).
 
 triple_string_compiles_test() ->

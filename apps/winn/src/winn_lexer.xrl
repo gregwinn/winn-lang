@@ -8,12 +8,13 @@ D   = [0-9]
 A   = [a-zA-Z_]
 AN  = [a-zA-Z0-9_]
 UC  = [A-Z]
-WS  = [\s\t\r\n]
+WS  = [\s\t\r]
 
 Rules.
 
 %% Whitespace (including newlines — not significant in Phase 1)
 {WS}+                       : skip_token.
+\n+                         : {token, {newline, TokenLine}}.
 
 %% Line comments
 #[^\n]*                     : skip_token.

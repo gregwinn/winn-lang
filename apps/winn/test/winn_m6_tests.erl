@@ -6,7 +6,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -34,7 +35,7 @@ e2e_ws_connect_compiles_test() ->
 
 e2e_use_websocket_test() ->
     Src = "module WsHandler\n  use Winn.WebSocket\n\n  def on_connect(conn)\n    :ok\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     [{module, _, 'WsHandler', Body}] = winn_transform:transform(AST),
     ?assertMatch({behaviour_attr, _, winn_ws_handler}, hd(Body)).

@@ -7,7 +7,8 @@
 %% ── Helpers ──────────────────────────────────────────────────────────────────
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -17,7 +18,8 @@ compile_and_load(Source) ->
     ModName.
 
 parse(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     AST.
 
@@ -47,7 +49,8 @@ import_transform_test() ->
              "    map([1,2,3]) do |x| x * 2 end\n"
              "  end\n"
              "end\n",
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     [{module, _, _, Body}] = winn_transform:transform(AST),
     %% Find the function body — it should contain a dot_call to Enum, not a local call
@@ -69,7 +72,8 @@ import_preserves_local_test() ->
              "    helper()\n"
              "  end\n"
              "end\n",
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     [{module, _, _, Body}] = winn_transform:transform(AST),
     [{function, _, run, _, RunBody}] = [F || {function, _, run, _, _} = F <- Body],
@@ -86,7 +90,8 @@ alias_transform_test() ->
              "    Auth.verify(\"token\")\n"
              "  end\n"
              "end\n",
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     [{module, _, _, Body}] = winn_transform:transform(AST),
     [{function, _, run, _, RunBody}] = [F || {function, _, run, _, _} = F <- Body],

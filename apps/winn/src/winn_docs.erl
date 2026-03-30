@@ -71,7 +71,8 @@ generate_module_doc_from_string(Source) ->
 
 parse_source(Source) ->
     case winn_lexer:string(Source) of
-        {ok, Tokens, _} ->
+        {ok, RawTokens, _} ->
+            Tokens = winn_newline_filter:filter(RawTokens),
             case winn_parser:parse(Tokens) of
                 {ok, AST} -> {ok, AST};
                 {error, R} -> {error, R}
