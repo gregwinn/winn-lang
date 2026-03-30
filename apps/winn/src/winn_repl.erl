@@ -139,7 +139,8 @@ build_source(ModName, Input, Bindings) ->
 
 compile_eval(Source, ModAtom) ->
     try
-        {ok, Tokens, _} = winn_lexer:string(Source),
+        {ok, RawTokens, _} = winn_lexer:string(Source),
+        Tokens = winn_newline_filter:filter(RawTokens),
         {ok, AST}       = winn_parser:parse(Tokens),
         Transformed     = winn_transform:transform(AST),
         [CoreMod]       = winn_codegen:gen(Transformed),
@@ -229,5 +230,5 @@ get_binding(Name) when is_list(Name) ->
 get_version() ->
     case application:get_key(winn, vsn) of
         {ok, Vsn} -> Vsn;
-        _         -> "0.3.0"
+        _         -> "0.4.0"
     end.

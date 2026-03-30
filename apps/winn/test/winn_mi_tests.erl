@@ -7,7 +7,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -51,7 +52,7 @@ inspect_builtin_test() ->
 %% ── MI3: Range literals ─────────────────────────────────────────────────
 
 range_lex_test() ->
-    {ok, Tokens, _} = winn_lexer:string("1..5"),
+    {ok, RawTok_, _} = winn_lexer:string("1..5"), Tokens = winn_newline_filter:filter(RawTok_),
     ?assertMatch([{integer_lit, _, 1}, {'..', _}, {integer_lit, _, 5}], Tokens).
 
 range_basic_test() ->

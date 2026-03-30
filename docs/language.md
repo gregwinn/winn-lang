@@ -102,6 +102,33 @@ module Math
 end
 ```
 
+### Default Parameter Values
+
+Parameters can have default values. When called with fewer arguments, defaults are filled in:
+
+```winn
+def greet(name, greeting = "Hello")
+  "#{greeting}, #{name}!"
+end
+
+greet("Alice")          # => "Hello, Alice!"
+greet("Alice", "Hi")    # => "Hi, Alice!"
+```
+
+Multiple defaults are supported — they must come after required parameters:
+
+```winn
+def connect(host, port = 5432, timeout = 5000)
+  # ...
+end
+
+connect("localhost")             # port=5432, timeout=5000
+connect("localhost", 3306)       # timeout=5000
+connect("localhost", 3306, 10000)
+```
+
+Defaults can be strings, integers, floats, atoms, and booleans.
+
 ### Multi-clause Functions
 
 Define multiple clauses for pattern-based dispatch:
@@ -375,6 +402,132 @@ list
   |> Enum.map()    do |x| x * 10 end
 ```
 
+### Pipe Assign (`|>=`)
+
+Capture the result of a pipe chain into a variable:
+
+```winn
+[1, 2, 3, 4, 5]
+  |> Enum.filter() do |x| x > 2 end
+  |> Enum.map() do |x| x * 10 end
+  |>= results
+
+IO.puts("Got #{to_string(List.length(results))} results")
+```
+
+`|>=` assigns the pipe result to the named variable. The variable is available in subsequent expressions.
+
+## Triple-Quoted Strings
+
+Use `"""..."""` for multi-line strings. Common leading whitespace is stripped automatically, and embedded `"` quotes don't need escaping:
+
+```winn
+sql = """
+  SELECT *
+  FROM users
+  WHERE active = true
+  ORDER BY created_at DESC
+"""
+
+html = """
+  <div class="card">
+    <h1>#{title}</h1>
+  </div>
+"""
+```
+
+Triple-quoted strings support interpolation (`#{}`) just like regular strings.
+
+## Structs
+
+Define named struct types with `struct`:
+
+```winn
+module User
+  struct [:name, :email, :age]
+end
+```
+
+This generates:
+- `User.new()` — returns a map with all fields set to `nil` and a `__struct__` key
+- `User.new(%{name: "Alice", age: 30})` — merges attributes into the default map
+- `User.__struct__()` — returns the module atom (for type identification)
+- `User.__fields__()` — returns the list of field names
+
+```winn
+user = User.new(%{name: "Alice", age: 30})
+user.name        # => "Alice"
+user.__struct__  # => :user
+```
+
+Structs are maps with a `__struct__` key, so all Map functions work on them. You can define methods alongside the struct:
+
+```winn
+module User
+  struct [:name, :email]
+
+  def greet(user)
+    "Hello, #{user.name}!"
+  end
+end
+```
+
+## Protocols
+
+Protocols define interfaces that multiple struct types can implement. Dispatch is based on the `__struct__` key at runtime.
+
+### Defining a Protocol
+
+```winn
+module Printable
+  protocol do
+    def to_s(value)
+      "unknown"
+    end
+  end
+end
+```
+
+### Implementing a Protocol
+
+Use `impl ProtocolName do ... end` inside a struct module:
+
+```winn
+module User
+  struct [:name, :email]
+
+  impl Printable do
+    def to_s(user)
+      "User(#{user.name})"
+    end
+  end
+end
+
+module Post
+  struct [:title]
+
+  impl Printable do
+    def to_s(post)
+      "Post: #{post.title}"
+    end
+  end
+end
+```
+
+### Using Protocols
+
+Call the protocol function — dispatch happens automatically based on the struct type:
+
+```winn
+user = User.new(%{name: "Alice"})
+post = Post.new(%{title: "Hello World"})
+
+Printable.to_s(user)   # => "User(Alice)"
+Printable.to_s(post)   # => "Post: Hello World"
+```
+
+Protocol implementations are registered at module load time. Multiple struct types can implement the same protocol.
+
 ## Standalone Lambdas
 
 Create anonymous functions with `fn(params) => body end`:
@@ -523,17 +676,27 @@ switch code
 end
 ```
 
-For multiple expressions in a clause body, use `do...end`:
+For multiple expressions in a clause body, just use newlines:
+
+```winn
+switch status
+  :active =>
+    Logger.info("user is active")
+    :ok
+  :inactive =>
+    Logger.warn("user inactive")
+    :disabled
+  _ => :unknown
+end
+```
+
+The old `do...end` wrapper syntax also still works:
 
 ```winn
 switch status
   :active => do
     Logger.info("user is active")
     :ok
-  end
-  :inactive => do
-    Logger.warn("user inactive")
-    :disabled
   end
   _ => :unknown
 end
@@ -621,11 +784,31 @@ Logger.info("request processed", %{duration_ms: 150})
 
 ## Comments
 
-Comments start with `#`:
+Line comments start with `#`:
 
 ```winn
 # This is a comment
 def greet(name)
   IO.puts("Hello, " <> name)  # inline comment
 end
+```
+
+Block comments use `#| ... |#` and can span multiple lines:
+
+```winn
+#|
+  This module handles user authentication.
+  It supports JWT and session-based auth.
+|#
+module Auth
+  def verify(token)
+    # ...
+  end
+end
+```
+
+Block comments can also be used inline or to comment out code:
+
+```winn
+x = 42 #| temporary |# + 0
 ```

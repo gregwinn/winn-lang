@@ -8,17 +8,23 @@ D   = [0-9]
 A   = [a-zA-Z_]
 AN  = [a-zA-Z0-9_]
 UC  = [A-Z]
-WS  = [\s\t\r\n]
+WS  = [\s\t\r]
 
 Rules.
 
 %% Whitespace (including newlines — not significant in Phase 1)
 {WS}+                       : skip_token.
+\n+                         : {token, {newline, TokenLine}}.
 
-%% Line comments
-#[^\n]*                     : skip_token.
+%% Block comments: #| ... |#
+#\|([^|]|\|[^#])*\|#       : skip_token.
+
+%% Line comments (# not followed by |)
+#[^|\n][^\n]*               : skip_token.
+#                           : skip_token.
 
 %% Two-character operators (must be before single-char operators)
+\|>=                        : {token, {'|>=', TokenLine}}.
 \|>                         : {token, {'|>', TokenLine}}.
 =>                          : {token, {'=>', TokenLine}}.
 ->                          : {token, {'->', TokenLine}}.
@@ -32,6 +38,9 @@ Rules.
 %% Keywords — must appear before the identifier catch-all
 module                      : {token, {'module', TokenLine}}.
 def                         : {token, {'def', TokenLine}}.
+struct                      : {token, {'struct', TokenLine}}.
+protocol                    : {token, {'protocol', TokenLine}}.
+impl                        : {token, {'impl', TokenLine}}.
 do                          : {token, {'do', TokenLine}}.
 end                         : {token, {'end', TokenLine}}.
 match                       : {token, {'match', TokenLine}}.
@@ -80,6 +89,9 @@ preload                     : {token, {'preload', TokenLine}}.
 %% Integer
 {D}+                        : {token, {integer_lit, TokenLine, list_to_integer(TokenChars)}}.
 
+%% Triple-quoted string (multi-line, can contain unescaped quotes, strips leading whitespace)
+\"\"\"(.|\n)*\"\"\"         : make_triple_string_token(TokenLine, TokenChars).
+
 %% String literal (double-quoted, supports #{expr} interpolation)
 \"[^\"]*\"                  : make_string_token(TokenLine, TokenChars).
 
@@ -119,6 +131,67 @@ preload                     : {token, {'preload', TokenLine}}.
 _                           : {token, {'_', TokenLine}}.
 
 Erlang code.
+
+%% Triple-quoted string constructor — strips common leading whitespace.
+make_triple_string_token(Line, Chars) ->
+    %% Remove the surrounding """ delimiters
+    Inner = lists:sublist(Chars, 4, length(Chars) - 6),
+    %% Strip leading newline if present
+    Stripped = case Inner of
+        [$\n | Rest] -> Rest;
+        Other -> Other
+    end,
+    %% Strip trailing newline + whitespace before closing """
+    Trimmed = strip_trailing_ws(Stripped),
+    %% Strip common leading whitespace
+    Dedented = dedent(Trimmed),
+    case has_interpolation(Dedented) of
+        false ->
+            {token, {string_lit, Line, list_to_binary(Dedented)}};
+        true ->
+            Parts = parse_interp(Dedented, [], []),
+            {token, {interp_string, Line, Parts}}
+    end.
+
+strip_trailing_ws(Str) ->
+    lists:reverse(strip_leading_ws(lists:reverse(Str))).
+
+strip_leading_ws([$\n | Rest]) -> strip_leading_ws(Rest);
+strip_leading_ws([$\s | Rest]) -> strip_leading_ws(Rest);
+strip_leading_ws([$\t | Rest]) -> strip_leading_ws(Rest);
+strip_leading_ws(Other) -> Other.
+
+dedent(Str) ->
+    Lines = split_lines(Str),
+    case Lines of
+        [] -> "";
+        _ ->
+            %% Find minimum indentation of non-empty lines
+            Indents = [count_indent(L) || L <- Lines, L =/= []],
+            MinIndent = case Indents of
+                [] -> 0;
+                _  -> lists:min(Indents)
+            end,
+            Dedented = [drop_chars(L, MinIndent) || L <- Lines],
+            join_lines(Dedented)
+    end.
+
+split_lines(Str) -> split_lines(Str, [], []).
+split_lines([], Cur, Acc) -> lists:reverse([lists:reverse(Cur) | Acc]);
+split_lines([$\n | Rest], Cur, Acc) -> split_lines(Rest, [], [lists:reverse(Cur) | Acc]);
+split_lines([C | Rest], Cur, Acc) -> split_lines(Rest, [C | Cur], Acc).
+
+join_lines([]) -> [];
+join_lines([Single]) -> Single;
+join_lines([H | T]) -> H ++ [$\n | join_lines(T)].
+
+count_indent([$\s | Rest]) -> 1 + count_indent(Rest);
+count_indent([$\t | Rest]) -> 1 + count_indent(Rest);
+count_indent(_) -> 0.
+
+drop_chars(Str, 0) -> Str;
+drop_chars([], _) -> [];
+drop_chars([_ | Rest], N) -> drop_chars(Rest, N - 1).
 
 %% String token constructor — detects interpolation.
 make_string_token(Line, Chars) ->

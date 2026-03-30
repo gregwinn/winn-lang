@@ -9,7 +9,7 @@
 %% Backed by ETS for fast concurrent reads.
 
 -module(winn_config).
--export([get/2, get/3, put/3, load/1, init/0]).
+-export([get/2, get/3, put/3, load/1, init/0, ensure_init/0]).
 
 -define(TABLE, winn_config_table).
 

@@ -6,7 +6,7 @@
 
 %% Helper: lex + parse a string and return the AST.
 parse(Src) ->
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, Forms}     = winn_parser:parse(Tokens),
     Forms.
 

@@ -27,7 +27,10 @@ transform_form({module, Line, Name, Body}) ->
     {UseDirs, Rest1}    = lists:partition(fun({use_directive,_,_,_}) -> true; (_) -> false end, Body),
     {ImportDirs, Rest2} = lists:partition(fun({import_directive,_,_}) -> true; (_) -> false end, Rest1),
     {AliasDirs, Rest3}  = lists:partition(fun({alias_directive,_,_,_}) -> true; (_) -> false end, Rest2),
-    {SchemaDefs, Fns}   = lists:partition(fun({schema_def,_,_,_})    -> true; (_) -> false end, Rest3),
+    {StructDefs, Rest4} = lists:partition(fun({struct_def,_,_})        -> true; (_) -> false end, Rest3),
+    {ProtocolDefs, Rest5} = lists:partition(fun({protocol_def,_,_})  -> true; (_) -> false end, Rest4),
+    {ImplDefs, Rest6}   = lists:partition(fun({impl_def,_,_,_})      -> true; (_) -> false end, Rest5),
+    {SchemaDefs, Fns}   = lists:partition(fun({schema_def,_,_,_})    -> true; (_) -> false end, Rest6),
 
     %% Expand use directives.
     Expanded       = [expand_use(ULine, Mod, Sub, Name) || {use_directive, ULine, Mod, Sub} <- UseDirs],
@@ -35,13 +38,22 @@ transform_form({module, Line, Name, Body}) ->
                   ++ [Attr || {behaviour_only, Attr} <- Expanded],
     SyntheticFns   = [Fn   || {behaviour, _, Fn}   <- Expanded],
 
-    %% Expand schema defs into generated functions, then case-wrap pattern params.
+    %% Expand struct, protocol, impl, and schema defs into generated functions.
+    StructFns = [transform_function(F)
+                 || F <- lists:append([expand_struct_def(SD, Name) || SD <- StructDefs])],
+    ProtocolFns = [transform_function(F)
+                   || F <- lists:append([expand_protocol_def(PD, Name) || PD <- ProtocolDefs])],
+    ImplFns = [transform_function(F)
+               || F <- lists:append([expand_impl_def(ID, Name) || ID <- ImplDefs])],
     SchemaFns = [transform_function(F)
                  || F <- lists:append([expand_schema_def(SD) || SD <- SchemaDefs])],
 
+    %% Expand default parameters into multiple function clauses.
+    ExpandedFns = lists:flatmap(fun expand_default_params/1, Fns),
+
     %% Transform and merge regular functions.
-    Pass1  = [transform_function(F) || F <- Fns],
-    Merged = merge_fn_clauses(SchemaFns ++ Pass1),
+    Pass1  = [transform_function(F) || F <- ExpandedFns],
+    Merged = merge_fn_clauses(StructFns ++ ProtocolFns ++ ImplFns ++ SchemaFns ++ Pass1),
 
     %% Apply import/alias rewrites.
     Imports  = [Mod || {import_directive, _, Mod} <- ImportDirs],
@@ -103,6 +115,155 @@ expand_use(Line, 'Winn', 'Test', _ModName) ->
     {behaviour_only, Attr};
 expand_use(_Line, 'Winn', 'Schema', _ModName) ->
     {schema_use, none}.
+
+%% ── Default parameter expansion ─────────────────────────────────────────
+%% Generates wrapper clauses for functions with default parameters.
+%% def greet(name, greeting = "Hello") ... end
+%% becomes:
+%%   def greet(name)           → greet(name, "Hello")
+%%   def greet(name, greeting) → <original body>
+
+expand_default_params({function, Line, Name, Params, Body}) ->
+    case split_defaults(Params) of
+        {_, []} ->
+            %% No defaults — return as-is
+            [{function, Line, Name, Params, Body}];
+        {Required, Defaults} ->
+            %% Generate the full-arity clause with plain var params
+            FullParams = Required ++ [begin {var, DL, DN} end
+                                      || {default_param, DL, DN, _} <- Defaults],
+            FullClause = {function, Line, Name, FullParams, Body},
+            %% Generate wrapper clauses for each missing default
+            Wrappers = generate_default_wrappers(Line, Name, Required, Defaults),
+            Wrappers ++ [FullClause]
+    end;
+expand_default_params(Other) ->
+    [Other].
+
+split_defaults(Params) ->
+    split_defaults(Params, [], []).
+split_defaults([], Req, Def) ->
+    {lists:reverse(Req), lists:reverse(Def)};
+split_defaults([{default_param, _, _, _} = D | Rest], Req, Def) ->
+    split_defaults(Rest, Req, [D | Def]);
+split_defaults([P | Rest], Req, Def) ->
+    split_defaults(Rest, [P | Req], Def).
+
+generate_default_wrappers(Line, Name, Required, Defaults) ->
+    %% For N defaults, generate N wrappers.
+    %% Wrapper K takes Required + first K default params, fills in the rest.
+    AllDefaults = [{var, DL, DN} || {default_param, DL, DN, _} <- Defaults],
+    AllDefaultVals = [DV || {default_param, _, _, DV} <- Defaults],
+    NumDefaults = length(Defaults),
+    [begin
+        %% Take first K default params as explicit args
+        ExplicitDefParams = lists:sublist(AllDefaults, K),
+        %% Fill remaining defaults with their values
+        RemainingVals = lists:nthtail(K, AllDefaultVals),
+        WrapperParams = Required ++ ExplicitDefParams,
+        CallArgs = Required ++ ExplicitDefParams ++ RemainingVals,
+        {function, Line, Name, WrapperParams, [{call, Line, Name, CallArgs}]}
+     end || K <- lists:seq(0, NumDefaults - 1)].
+
+%% ── Struct definition expansion ──────────────────────────────────────────
+%% defstruct [:name, :email, :age] generates:
+%%   __struct__()  -> module atom (for type identification)
+%%   __fields__()  -> [:name, :email, :age]
+%%   new()         -> %{__struct__: ModName, name: nil, email: nil, age: nil}
+%%   new(attrs)    -> Map.merge(new(), attrs)
+
+expand_struct_def({struct_def, L, FieldNames}, ModName) ->
+    ModAtom = lower_module_atom(ModName),
+
+    %% __struct__() -> module atom
+    StructFn = {function, L, '__struct__', [],
+                [{atom, L, ModAtom}]},
+
+    %% __fields__() -> list of field atoms
+    FieldsFn = {function, L, '__fields__', [],
+                [{list, L, [{atom, L, F} || F <- FieldNames]}]},
+
+    %% Default map: %{__struct__: mod, field1: nil, field2: nil, ...}
+    DefaultPairs = [{'__struct__', {atom, L, ModAtom}}
+                   | [{F, {nil, L}} || F <- FieldNames]],
+
+    %% new() -> default map
+    New0Fn = {function, L, new, [],
+              [{map, L, DefaultPairs}]},
+
+    %% new(attrs) -> Map.merge(default, attrs)
+    New1Fn = {function, L, new, [{var, L, attrs}],
+              [{dot_call, L, 'Map', merge, [
+                  {map, L, DefaultPairs},
+                  {var, L, attrs}
+              ]}]},
+
+    [StructFn, FieldsFn, New0Fn, New1Fn].
+
+%% ── Protocol definition expansion ────────────────────────────────────────
+%% protocol do
+%%   def to_s(value)
+%%     ...
+%%   end
+%% end
+%%
+%% Generates dispatch functions:
+%%   to_s(value) -> winn_protocol:dispatch(protocol_name, to_s, [value])
+
+expand_protocol_def({protocol_def, L, MethodDefs}, ModName) ->
+    ProtocolAtom = lower_module_atom(ModName),
+    [begin
+        Arity = length(Params),
+        DispatchArgs = {list, L, [{var, L, P} || {var, _, P} <- Params]},
+        {function, L, FnName, Params,
+         [{dot_call, L, 'Protocol', dispatch, [
+             {atom, L, ProtocolAtom},
+             {atom, L, FnName},
+             DispatchArgs
+         ]}]}
+     end || {function, _, FnName, Params, _} <- MethodDefs,
+            Arity <- [length(Params)],
+            Arity > 0].
+
+%% ── Implementation definition expansion ─────────────────────────────────
+%% impl Printable do
+%%   def to_s(user)
+%%     "User(#{user.name})"
+%%   end
+%% end
+%%
+%% Generates:
+%%   '__impl_printable_to_s'/1 — the actual implementation
+%%   '__register_impls__'/0 — registers all impls in ETS (called at load time)
+
+expand_impl_def({impl_def, L, ProtocolName, MethodDefs}, ModName) ->
+    ProtocolAtom = lower_module_atom(ProtocolName),
+    StructAtom = lower_module_atom(ModName),
+    ModAtom = lower_module_atom(ModName),
+
+    %% Generate implementation functions with mangled names
+    ImplFns = [begin
+        ImplName = list_to_atom("__impl_" ++ atom_to_list(ProtocolAtom)
+                                ++ "_" ++ atom_to_list(FnName)),
+        {function, L, ImplName, Params, Body}
+    end || {function, _, FnName, Params, Body} <- MethodDefs],
+
+    %% Generate registration function
+    RegCalls = [begin
+        ImplName = list_to_atom("__impl_" ++ atom_to_list(ProtocolAtom)
+                                ++ "_" ++ atom_to_list(FnName)),
+        {dot_call, L, 'Protocol', register_impl, [
+            {atom, L, ProtocolAtom},
+            {atom, L, FnName},
+            {atom, L, StructAtom},
+            {tuple, L, [{atom, L, ModAtom}, {atom, L, ImplName}]}
+        ]}
+    end || {function, _, FnName, _, _} <- MethodDefs],
+
+    RegFn = {function, L, '__register_impls__', [],
+             RegCalls ++ [{atom, L, ok}]},
+
+    ImplFns ++ [RegFn].
 
 %% ── Schema definition expansion ──────────────────────────────────────────
 

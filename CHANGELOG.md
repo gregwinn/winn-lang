@@ -2,11 +2,23 @@
 
 All notable changes to the Winn language are documented here.
 
+## [0.4.0] - 2026-03-29
+
+### Language Features
+- **Pipe assign (`|>=`)** — capture pipe chain results into a variable
+- **Triple-quoted strings (`"""..."""`)** — multi-line strings with auto-dedent and embedded quotes
+- **Default parameter values** — `def greet(name, greeting = "Hello")` with multiple arities generated
+- **Struct types** — `struct [:name, :email]` generates `new/0`, `new/1`, `__struct__/0`, `__fields__/0`
+- **Protocols** — `protocol do ... end` defines interfaces, `impl ProtocolName do ... end` implements them for struct types with runtime ETS dispatch
+- **Significant newlines** — multi-expression switch/rescue clause bodies without `do...end` wrappers (backward compatible)
+- **Block comments** — `#| ... |#` for multi-line comments, can comment out blocks of code
+
 ## [0.3.0] - 2026-03-28
 
 ### Language Features
 - **`import Module`** — bring a module's functions into scope as local calls
 - **`alias Parent.Child`** — use a short name for a dotted module path
+- Dotted module names (`module MyApp.Router`), `?` in function names, module names as expressions
 
 ### Testing Framework
 - **`winn test`** — run Winn tests from the CLI
@@ -17,6 +29,8 @@ All notable changes to the Winn language are documented here.
 - **`winn docs`** — generate Markdown API docs with Mermaid dependency graph
 - **`winn watch`** — file watcher with hot code reloading and live terminal dashboard
 - **`winn watch --start`** — watch mode + starts the app
+- **`Repo.configure`** — Winn-native database configuration
+- **`Repo.execute`** — raw SQL queries
 
 ### Compiler
 - **`module_info/0` and `module_info/1`** — now generated for all compiled modules
