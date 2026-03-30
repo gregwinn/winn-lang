@@ -6,7 +6,8 @@
 %% ── Helpers ──────────────────────────────────────────────────────────────
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -19,7 +20,7 @@ compile_and_load(Source) ->
 
 parse_try_rescue_test() ->
     Src = "module Test\n  def foo()\n    try\n      1\n    rescue\n      _ => 0\n    end\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     ?assertMatch([{module, _, 'Test', _}], AST).
 
@@ -27,7 +28,7 @@ parse_try_rescue_test() ->
 
 transform_try_rescue_test() ->
     Src = "module Test\n  def foo()\n    try\n      1\n    rescue\n      _ => 0\n    end\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     [{module, _, 'Test', Body}] = winn_transform:transform(AST),
     %% Body is case-wrapped (0-arity), inner body has the try_expr.

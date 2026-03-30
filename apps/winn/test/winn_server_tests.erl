@@ -5,7 +5,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -131,7 +132,7 @@ e2e_use_router_behaviour_test() ->
           "    []\n"
           "  end\n"
           "end\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     [{module, _, 'ApiRouter', Body}] = winn_transform:transform(AST),
     ?assertMatch({behaviour_attr, _, winn_router}, hd(Body)).

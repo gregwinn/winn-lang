@@ -6,7 +6,8 @@
 %% ── Helpers ──────────────────────────────────────────────────────────────
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -19,7 +20,7 @@ compile_and_load(Source) ->
 
 parse_guarded_function_test() ->
     Src = "module Test\n  def abs(n) when n > 0\n    n\n  end\n  def abs(n)\n    0 - n\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     ?assertMatch([{module, _, 'Test', _}], AST).
 
@@ -27,7 +28,7 @@ parse_guarded_function_test() ->
 
 transform_guarded_fn_test() ->
     Src = "module Test\n  def abs(n) when n > 0\n    n\n  end\n  def abs(n)\n    0 - n\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     [{module, _, 'Test', Body}] = winn_transform:transform(AST),
     %% Both clauses are case-wrapped, so they should merge into 1 function with 2 clauses.

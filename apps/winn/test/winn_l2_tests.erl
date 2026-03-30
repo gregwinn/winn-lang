@@ -6,7 +6,8 @@
 %% ── Helpers ──────────────────────────────────────────────────────────────
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -19,7 +20,7 @@ compile_and_load(Source) ->
 
 parse_switch_test() ->
     Src = "module Test\n  def foo(x)\n    switch x\n      :a => 1\n      :b => 2\n      _ => 0\n    end\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     ?assertMatch([{module, _, 'Test', _}], AST).
 
@@ -27,7 +28,7 @@ parse_switch_test() ->
 
 transform_switch_to_case_test() ->
     Src = "module Test\n  def foo(x)\n    switch x\n      :a => 1\n      _ => 0\n    end\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     [{module, _, 'Test', Body}] = winn_transform:transform(AST),
     %% Outer case wraps param, inner case is the switch desugaring.

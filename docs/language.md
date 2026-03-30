@@ -676,17 +676,27 @@ switch code
 end
 ```
 
-For multiple expressions in a clause body, use `do...end`:
+For multiple expressions in a clause body, just use newlines:
+
+```winn
+switch status
+  :active =>
+    Logger.info("user is active")
+    :ok
+  :inactive =>
+    Logger.warn("user inactive")
+    :disabled
+  _ => :unknown
+end
+```
+
+The old `do...end` wrapper syntax also still works:
 
 ```winn
 switch status
   :active => do
     Logger.info("user is active")
     :ok
-  end
-  :inactive => do
-    Logger.warn("user inactive")
-    :disabled
   end
   _ => :unknown
 end

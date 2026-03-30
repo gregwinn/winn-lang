@@ -65,8 +65,8 @@ run_pipeline(Source, FileName, OutDir) ->
 
 lex(Source, FileName) ->
     case winn_lexer:string(Source) of
-        {ok, Tokens, _EndLine} ->
-            {ok, Tokens};
+        {ok, RawTokens, _EndLine} ->
+            {ok, winn_newline_filter:filter(RawTokens)};
         {error, {Line, winn_lexer, Error}, _} ->
             {error, {lex_error, FileName, Line, winn_lexer:format_error(Error)}}
     end.

@@ -6,7 +6,8 @@
 %% ── Helpers ──────────────────────────────────────────────────────────────
 
 compile_and_load(Source) ->
-    {ok, Tokens, _} = winn_lexer:string(Source),
+    {ok, RawTokens, _} = winn_lexer:string(Source),
+    Tokens = winn_newline_filter:filter(RawTokens),
     {ok, AST}       = winn_parser:parse(Tokens),
     Transformed     = winn_transform:transform(AST),
     [CoreMod]       = winn_codegen:gen(Transformed),
@@ -19,13 +20,13 @@ compile_and_load(Source) ->
 
 parse_if_else_test() ->
     Src = "module Test\n  def foo()\n    if true\n      1\n    else\n      2\n    end\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     ?assertMatch([{module, _, 'Test', _}], AST).
 
 parse_if_no_else_test() ->
     Src = "module Test\n  def foo()\n    if true\n      1\n    end\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     ?assertMatch([{module, _, 'Test', _}], AST).
 
@@ -33,7 +34,7 @@ parse_if_no_else_test() ->
 
 transform_if_else_test() ->
     Src = "module Test\n  def foo()\n    if true\n      1\n    else\n      2\n    end\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     [{module, _, 'Test', Body}] = winn_transform:transform(AST),
     %% No params, so case-wrap has 0-arity; inner body has the if→case.
@@ -43,7 +44,7 @@ transform_if_else_test() ->
 
 transform_if_no_else_test() ->
     Src = "module Test\n  def foo()\n    if true\n      1\n    end\n  end\nend\n",
-    {ok, Tokens, _} = winn_lexer:string(Src),
+    {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_),
     {ok, AST} = winn_parser:parse(Tokens),
     [{module, _, 'Test', Body}] = winn_transform:transform(AST),
     [{function, _, foo, _, [{case_expr, _, _, [{case_clause, _, _, _, [IfCase]}]}]}] = Body,

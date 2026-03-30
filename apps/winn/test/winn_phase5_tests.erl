@@ -1,7 +1,7 @@
 -module(winn_phase5_tests).
 -include_lib("eunit/include/eunit.hrl").
 
-lex(Src)       -> {ok, Tokens, _} = winn_lexer:string(Src), Tokens.
+lex(Src)       -> {ok, RawTok_, _} = winn_lexer:string(Src), Tokens = winn_newline_filter:filter(RawTok_), Tokens.
 parse(Src)     -> {ok, Forms} = winn_parser:parse(lex(Src)), Forms.
 transform(Src) -> winn_transform:transform(parse(Src)).
 load_src(Src) ->
