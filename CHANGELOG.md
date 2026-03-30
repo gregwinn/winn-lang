@@ -2,7 +2,7 @@
 
 All notable changes to the Winn language are documented here.
 
-## [Unreleased]
+## [0.4.0] - 2026-03-29
 
 ### Language Features
 - **Pipe assign (`|>=`)** — capture pipe chain results into a variable
