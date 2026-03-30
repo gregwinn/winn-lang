@@ -406,9 +406,10 @@ run_task([]) ->
     io:format("Usage: winn task <name> [args...]~n~n"
               "Available tasks are discovered from tasks/*.winn and src/*.winn~n"
               "modules that use Winn.Task and define a run/1 function.~n~n"
-              "Task names use dots for namespacing:~n"
-              "  winn task db.migrate    => module Tasks.Db.Migrate~n"
-              "  winn task db.seed       => module Tasks.Db.Seed~n"),
+              "Task names use colons for namespacing (like Rails):~n"
+              "  winn task db:migrate    => module Tasks.Db.Migrate~n"
+              "  winn task db:seed       => module Tasks.Db.Seed~n"
+              "  winn task routes        => module Tasks.Routes~n"),
     halt(0);
 run_task([TaskName | Args]) ->
     %% Compile all source files
@@ -450,9 +451,9 @@ run_task([TaskName | Args]) ->
                             halt(1)
                     end;
                 _ ->
-                    %% Try without tasks. prefix
-                    SimpleAtom = list_to_atom(string:lowercase(
-                        string:replace(TaskName, ".", ".", all))),
+                    %% Try without tasks. prefix (convert colons to dots)
+                    Dotted = lists:flatten(string:replace(TaskName, ":", ".", all)),
+                    SimpleAtom = list_to_atom(string:lowercase(Dotted)),
                     case code:ensure_loaded(SimpleAtom) of
                         {module, SimpleAtom} ->
                             case erlang:function_exported(SimpleAtom, run, 1) of
@@ -481,8 +482,9 @@ run_task([TaskName | Args]) ->
     end.
 
 task_name_to_module(Name) ->
-    %% "db.migrate" -> "tasks.db.migrate" -> atom
-    list_to_atom("tasks." ++ string:lowercase(Name)).
+    %% "db:migrate" -> "tasks.db.migrate" -> atom (Rails-style colon syntax)
+    Dotted = string:replace(Name, ":", ".", all),
+    list_to_atom("tasks." ++ string:lowercase(lists:flatten(Dotted))).
 
 %% ── Docs generator ──────────────────────────────────────────────────────
 
@@ -564,7 +566,7 @@ print_usage() ->
         "  winn docs <file>        Generate docs for a single file~n"
         "  winn watch              Watch files and hot-reload with live dashboard~n"
         "  winn watch --start      Watch + start the app~n"
-        "  winn task <name>        Run a project task (e.g., winn task db.migrate)~n"
+        "  winn task <name>        Run a project task (e.g., winn task db:migrate)~n"
         "  winn deps               Manage dependencies~n"
         "  winn console            Interactive console~n"
         "  winn version            Show version~n"

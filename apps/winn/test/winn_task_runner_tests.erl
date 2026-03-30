@@ -7,25 +7,25 @@
 %% ── Parse args ──────────────────────────────────────────────────────────────
 
 parse_task_test() ->
-    ?assertEqual({task, ["db.migrate"]}, winn_cli:parse_args(["task", "db.migrate"])).
+    ?assertEqual({task, ["db:migrate"]}, winn_cli:parse_args(["task", "db:migrate"])).
 
 parse_task_with_args_test() ->
-    ?assertEqual({task, ["db.seed", "--file", "data.csv"]},
-                 winn_cli:parse_args(["task", "db.seed", "--file", "data.csv"])).
+    ?assertEqual({task, ["db:seed", "--file", "data.csv"]},
+                 winn_cli:parse_args(["task", "db:seed", "--file", "data.csv"])).
 
 parse_task_no_name_test() ->
     ?assertEqual({task, []}, winn_cli:parse_args(["task"])).
 
-%% ── Task name to module mapping ─────────────────────────────────────────────
+%% ── Task name to module mapping (colon syntax like Rails) ───────────────────
 
-task_name_mapping_test() ->
-    ?assertEqual('tasks.db.migrate', winn_cli:task_name_to_module("db.migrate")).
+task_name_colon_test() ->
+    ?assertEqual('tasks.db.migrate', winn_cli:task_name_to_module("db:migrate")).
 
 task_name_simple_test() ->
     ?assertEqual('tasks.hello', winn_cli:task_name_to_module("hello")).
 
 task_name_nested_test() ->
-    ?assertEqual('tasks.db.seed.users', winn_cli:task_name_to_module("db.seed.users")).
+    ?assertEqual('tasks.db.seed.users', winn_cli:task_name_to_module("db:seed:users")).
 
 %% ── End-to-end: compile and run a Winn task ─────────────────────────────────
 

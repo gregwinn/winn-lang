@@ -265,12 +265,12 @@ The dashboard shows:
 Run project tasks. Tasks are Winn modules with `use Winn.Task` and a `run/1` function.
 
 ```sh
-winn task db.migrate
-winn task db.seed --file data.csv
+winn task db:migrate
+winn task db:seed --file data.csv
 winn task routes
 ```
 
-Task names use dots for namespacing — `db.migrate` maps to `module Tasks.Db.Migrate`:
+Task names use colons for namespacing (like Rails) — `db:migrate` maps to `module Tasks.Db.Migrate`:
 
 ```winn
 module Tasks.Db.Migrate
