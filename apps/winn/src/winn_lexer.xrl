@@ -16,8 +16,12 @@ Rules.
 {WS}+                       : skip_token.
 \n+                         : {token, {newline, TokenLine}}.
 
-%% Line comments
-#[^\n]*                     : skip_token.
+%% Block comments: #| ... |#
+#\|([^|]|\|[^#])*\|#       : skip_token.
+
+%% Line comments (# not followed by |)
+#[^|\n][^\n]*               : skip_token.
+#                           : skip_token.
 
 %% Two-character operators (must be before single-char operators)
 \|>=                        : {token, {'|>=', TokenLine}}.
