@@ -5,7 +5,7 @@ All notable changes to the Winn language are documented here.
 ## [Unreleased]
 
 ### Tooling
-- **`winn task <name>`** — run project tasks from the CLI (e.g., `winn task db.migrate`)
+- **`winn task <name>`** — run project tasks from the CLI with Rails-style colon syntax (e.g., `winn task db:migrate`)
 
 ## [0.4.0] - 2026-03-29
 
