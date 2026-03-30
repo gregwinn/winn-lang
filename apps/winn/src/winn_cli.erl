@@ -2,7 +2,7 @@
 %% Escript entry point for the Winn CLI.
 
 -module(winn_cli).
--export([main/1, parse_args/1, scaffold/1]).
+-export([main/1, parse_args/1, scaffold/1, task_name_to_module/1]).
 
 %% ── Entry point ───────────────────────────────────────────────────────────
 
@@ -49,6 +49,9 @@ main(Args) ->
             Opts = #{start => lists:member("--start", WatchArgs)},
             winn_watch:start(Opts);
 
+        {task, TaskArgs} ->
+            run_task(TaskArgs);
+
         {deps, Sub} ->
             Result = run_deps(Sub),
             case Result of
@@ -82,6 +85,7 @@ parse_args(["test" | Args])        -> {test, Args};
 parse_args(["docs"])                -> {docs, []};
 parse_args(["docs" | Args])        -> {docs, Args};
 parse_args(["watch" | Args])       -> {watch, Args};
+parse_args(["task" | Args])        -> {task, Args};
 parse_args(["deps" | Sub])         -> {deps, Sub};
 parse_args(["version" | _])        -> version;
 parse_args(["-v" | _])             -> version;
@@ -396,6 +400,90 @@ load_test_beams(Dir, _Compiled) ->
         end
     end, Beams).
 
+%% ── Task runner ─────────────────────────────────────────────────────────
+
+run_task([]) ->
+    io:format("Usage: winn task <name> [args...]~n~n"
+              "Available tasks are discovered from tasks/*.winn and src/*.winn~n"
+              "modules that use Winn.Task and define a run/1 function.~n~n"
+              "Task names use dots for namespacing:~n"
+              "  winn task db.migrate    => module Tasks.Db.Migrate~n"
+              "  winn task db.seed       => module Tasks.Db.Seed~n"),
+    halt(0);
+run_task([TaskName | Args]) ->
+    %% Compile all source files
+    OutDir = "_build/tasks",
+    ok = filelib:ensure_path(OutDir),
+    SrcFiles = filelib:wildcard("src/*.winn") ++ filelib:wildcard("tasks/*.winn"),
+    case SrcFiles of
+        [] ->
+            io:format("No .winn files found.~n"),
+            halt(1);
+        _ ->
+            lists:foreach(fun(F) ->
+                case winn:compile_file(F, OutDir) of
+                    {ok, _} -> ok;
+                    {error, _} -> ok
+                end
+            end, SrcFiles),
+            code:add_patha(OutDir),
+
+            %% Map task name to module atom
+            %% db.migrate -> tasks.db.migrate (try with tasks. prefix first)
+            %% If not found, try just the dotted name lowercased
+            ModAtom = task_name_to_module(TaskName),
+            case code:ensure_loaded(ModAtom) of
+                {module, ModAtom} ->
+                    case erlang:function_exported(ModAtom, run, 1) of
+                        true ->
+                            try
+                                ModAtom:run(Args),
+                                halt(0)
+                            catch
+                                Class:Reason:Stack ->
+                                    io:format("Task ~s failed: ~p:~p~n~p~n",
+                                              [TaskName, Class, Reason, Stack]),
+                                    halt(1)
+                            end;
+                        false ->
+                            io:format("Error: module ~s does not export run/1~n", [ModAtom]),
+                            halt(1)
+                    end;
+                _ ->
+                    %% Try without tasks. prefix
+                    SimpleAtom = list_to_atom(string:lowercase(
+                        string:replace(TaskName, ".", ".", all))),
+                    case code:ensure_loaded(SimpleAtom) of
+                        {module, SimpleAtom} ->
+                            case erlang:function_exported(SimpleAtom, run, 1) of
+                                true ->
+                                    try
+                                        SimpleAtom:run(Args),
+                                        halt(0)
+                                    catch
+                                        Class:Reason:Stack ->
+                                            io:format("Task ~s failed: ~p:~p~n~p~n",
+                                                      [TaskName, Class, Reason, Stack]),
+                                            halt(1)
+                                    end;
+                                false ->
+                                    io:format("Error: task ~s not found~n", [TaskName]),
+                                    halt(1)
+                            end;
+                        _ ->
+                            io:format("Error: task ~s not found~n~n"
+                                      "Make sure the task module exists in tasks/ or src/~n"
+                                      "and uses Winn.Task with a run/1 function.~n",
+                                      [TaskName]),
+                            halt(1)
+                    end
+            end
+    end.
+
+task_name_to_module(Name) ->
+    %% "db.migrate" -> "tasks.db.migrate" -> atom
+    list_to_atom("tasks." ++ string:lowercase(Name)).
+
 %% ── Docs generator ──────────────────────────────────────────────────────
 
 run_docs(Args) ->
@@ -476,6 +564,7 @@ print_usage() ->
         "  winn docs <file>        Generate docs for a single file~n"
         "  winn watch              Watch files and hot-reload with live dashboard~n"
         "  winn watch --start      Watch + start the app~n"
+        "  winn task <name>        Run a project task (e.g., winn task db.migrate)~n"
         "  winn deps               Manage dependencies~n"
         "  winn console            Interactive console~n"
         "  winn version            Show version~n"

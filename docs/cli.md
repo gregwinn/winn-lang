@@ -260,6 +260,32 @@ The dashboard shows:
 
 ---
 
+### `winn task <name> [args...]`
+
+Run project tasks. Tasks are Winn modules with `use Winn.Task` and a `run/1` function.
+
+```sh
+winn task db.migrate
+winn task db.seed --file data.csv
+winn task routes
+```
+
+Task names use dots for namespacing — `db.migrate` maps to `module Tasks.Db.Migrate`:
+
+```winn
+module Tasks.Db.Migrate
+  use Winn.Task
+
+  def run(args)
+    IO.puts("Running migrations...")
+  end
+end
+```
+
+Tasks are discovered from `tasks/*.winn` and `src/*.winn`. The task runner compiles all source files, finds the matching module, and calls `run/1` with any extra CLI arguments.
+
+---
+
 ### `winn deps`
 
 Manage project dependencies.
