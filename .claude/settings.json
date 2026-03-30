@@ -1,3 +1,24 @@
 {
-  "channelsEnabled": true
+  "channelsEnabled": true,
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | { read -r f; echo \"$f\" | grep -qE '(winn_lexer|winn_parser|winn_transform|winn_codegen)' && cd /home/gregwinn/Projects/Personal/winn-lang && rebar3 compile; } 2>/dev/null || true",
+            "timeout": 60,
+            "statusMessage": "Auto-compiling..."
+          },
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | { read -r f; echo \"$f\" | grep -qE '\\.erl$' && cd /home/gregwinn/Projects/Personal/winn-lang && rebar3 eunit; } 2>/dev/null || true",
+            "timeout": 120,
+            "statusMessage": "Running tests..."
+          }
+        ]
+      }
+    ]
+  }
 }

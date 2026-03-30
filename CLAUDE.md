@@ -115,10 +115,11 @@ Commands: `new`, `compile`, `run`, `start`, `test`, `docs`, `watch`, `console`, 
 ## Release Process
 
 Use `/release patch|minor|major` Claude skill, or manually:
-1. Bump version in `apps/winn/src/winn.app.src` and `winn_cli.erl` fallback
+1. Bump version in `apps/winn/src/winn.app.src`, `winn_cli.erl`, and `winn_repl.erl` fallbacks
 2. `rebar3 escriptize`
 3. Tag, push, `gh release create`
-4. Update `/tmp/homebrew-winn/Formula/winn.rb` with new URL + SHA256
+4. Update `gregwinn/homebrew-winn` Formula with new URL + SHA256
+5. **Update `gregwinn/winn-lang-website`** — version in footer, features, code examples, roadmap (CRITICAL)
 
 ## External Dependencies
 
