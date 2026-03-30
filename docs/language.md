@@ -784,11 +784,31 @@ Logger.info("request processed", %{duration_ms: 150})
 
 ## Comments
 
-Comments start with `#`:
+Line comments start with `#`:
 
 ```winn
 # This is a comment
 def greet(name)
   IO.puts("Hello, " <> name)  # inline comment
 end
+```
+
+Block comments use `#| ... |#` and can span multiple lines:
+
+```winn
+#|
+  This module handles user authentication.
+  It supports JWT and session-based auth.
+|#
+module Auth
+  def verify(token)
+    # ...
+  end
+end
+```
+
+Block comments can also be used inline or to comment out code:
+
+```winn
+x = 42 #| temporary |# + 0
 ```
