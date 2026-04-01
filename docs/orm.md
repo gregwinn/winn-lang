@@ -39,6 +39,20 @@ Repo.pool_status()  # => {:ok, %{idle: 8, busy: 2, max: 10}}
 
 Without `pool_size`, Repo falls back to opening/closing a connection per query (backward compatible).
 
+### Transactions
+
+Wrap multiple operations in an atomic transaction:
+
+```winn
+Repo.transaction(fn() =>
+  {:ok, user} = User.create(%{name: "Alice"})
+  {:ok, profile} = Profile.create(%{user_id: user.id, bio: "Hello"})
+  {:ok, user}
+end)
+```
+
+Returns `{:ok, result}` on success. On any error or exception, the transaction is rolled back and returns `{:error, reason}`.
+
 You can also configure individual keys:
 
 ```winn
