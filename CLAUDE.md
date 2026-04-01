@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```sh
 rebar3 compile              # Compile everything
-rebar3 eunit                # Run all 360 tests
+rebar3 eunit                # Run all 475 tests
 rebar3 eunit --module=winn_l1_tests  # Run a single test module
 rebar3 escriptize           # Build the winn CLI escript
 ./_build/default/bin/winn help       # Verify CLI works
@@ -110,7 +110,7 @@ Use unique module names in each test to avoid beam cache collisions.
 
 ## CLI (winn_cli.erl)
 
-Commands: `new`, `compile`, `run`, `start`, `test`, `docs`, `watch`, `console`, `deps`, `version`, `help`. The `start` command compiles all `src/*.winn`, loads `_build` dep paths, starts OTP apps, calls `main()`, and blocks with `receive` to keep the VM alive. The `run` command reads the module name from the source file (regex on `module Name`), not from the filename.
+Commands: `new`, `compile`, `run`, `start`, `test`, `docs`, `watch`, `create`/`c`, `task`, `migrate`, `rollback`, `release`, `console`, `deps`, `version`, `help`. The `start` command compiles all `src/*.winn`, loads `_build` dep paths, starts OTP apps, calls `main()`, and blocks with `receive` to keep the VM alive. The `run` command reads the module name from the source file (regex on `module Name`), not from the filename.
 
 ## Release Process
 
