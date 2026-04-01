@@ -52,6 +52,12 @@ main(Args) ->
         {task, TaskArgs} ->
             run_task(TaskArgs);
 
+        {migrate, MigrateArgs} ->
+            run_migrate(MigrateArgs);
+
+        {rollback, RollbackArgs} ->
+            run_rollback(RollbackArgs);
+
         {deps, Sub} ->
             Result = run_deps(Sub),
             case Result of
@@ -86,6 +92,8 @@ parse_args(["docs"])                -> {docs, []};
 parse_args(["docs" | Args])        -> {docs, Args};
 parse_args(["watch" | Args])       -> {watch, Args};
 parse_args(["task" | Args])        -> {task, Args};
+parse_args(["migrate" | Args])     -> {migrate, Args};
+parse_args(["rollback" | Args])    -> {rollback, Args};
 parse_args(["deps" | Sub])         -> {deps, Sub};
 parse_args(["version" | _])        -> version;
 parse_args(["-v" | _])             -> version;
@@ -400,6 +408,44 @@ load_test_beams(Dir, _Compiled) ->
         end
     end, Beams).
 
+%% ── Migration commands ──────────────────────────────────────────────────
+
+run_migrate(["--status"]) ->
+    winn_migrate:status(),
+    halt(0);
+run_migrate(["--step", N]) ->
+    case winn_migrate:migrate(#{step => list_to_integer(N)}) of
+        ok -> halt(0);
+        _  -> halt(1)
+    end;
+run_migrate([]) ->
+    case winn_migrate:migrate(#{}) of
+        ok -> halt(0);
+        _  -> halt(1)
+    end;
+run_migrate(_) ->
+    io:format("Usage:~n"
+              "  winn migrate              Run all pending migrations~n"
+              "  winn migrate --step N     Run next N migrations~n"
+              "  winn migrate --status     Show migration status~n"),
+    halt(0).
+
+run_rollback(["--step", N]) ->
+    case winn_migrate:rollback(#{step => list_to_integer(N)}) of
+        ok -> halt(0);
+        _  -> halt(1)
+    end;
+run_rollback([]) ->
+    case winn_migrate:rollback(#{}) of
+        ok -> halt(0);
+        _  -> halt(1)
+    end;
+run_rollback(_) ->
+    io:format("Usage:~n"
+              "  winn rollback             Rollback last migration~n"
+              "  winn rollback --step N    Rollback last N migrations~n"),
+    halt(0).
+
 %% ── Task runner ─────────────────────────────────────────────────────────
 
 run_task([]) ->
@@ -566,7 +612,9 @@ print_usage() ->
         "  winn docs <file>        Generate docs for a single file~n"
         "  winn watch              Watch files and hot-reload with live dashboard~n"
         "  winn watch --start      Watch + start the app~n"
-        "  winn task <name>        Run a project task (e.g., winn task db:migrate)~n"
+        "  winn task <name>        Run a project task (e.g., winn task db:seed)~n"
+        "  winn migrate            Run pending database migrations~n"
+        "  winn rollback           Rollback last database migration~n"
         "  winn deps               Manage dependencies~n"
         "  winn console            Interactive console~n"
         "  winn version            Show version~n"
