@@ -320,6 +320,61 @@ Tasks are discovered from `tasks/*.winn` and `src/*.winn`. The task runner compi
 
 ---
 
+### `winn add <package>`
+
+Install a Winn package from GitHub.
+
+```sh
+winn add redis                        # install from gregwinn/winn-redis
+winn add github:user/winn-stripe      # install from any GitHub repo
+```
+
+Packages are repos with a `package.json` manifest and Winn source. Installing a package:
+- Clones the repo to `_packages/`
+- Copies Winn source files to `src/`
+- Adds Erlang dependencies to `rebar.config`
+- Registers the module mapping in `.winn_packages.json`
+- Adds to your project's `package.json`
+
+### `winn remove <package>`
+
+Remove an installed package.
+
+```sh
+winn remove redis
+```
+
+### `winn packages`
+
+List installed packages.
+
+```sh
+winn packages
+
+  Package       Version   Module
+  ────────────────────────────────
+  redis         0.1.0     Redis
+  mongodb       0.1.0     Mongo
+```
+
+### `winn install`
+
+Install all packages listed in `package.json`.
+
+```sh
+winn install
+```
+
+### Available Packages
+
+| Package | Install | Description |
+|---------|---------|-------------|
+| [winn-redis](https://github.com/gregwinn/winn-redis) | `winn add redis` | Redis client |
+| [winn-mongodb](https://github.com/gregwinn/winn-mongodb) | `winn add mongodb` | MongoDB client |
+| [winn-amqp](https://github.com/gregwinn/winn-amqp) | `winn add amqp` | RabbitMQ/AMQP client |
+
+---
+
 ### `winn deps`
 
 Manage project dependencies.

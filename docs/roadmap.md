@@ -14,21 +14,11 @@
 | v0.4.0 | Language Power | Pipe assign (`\|>=`), triple-quoted strings, default params, structs, protocols, significant newlines, block comments |
 | v0.5.0 | Production Readiness | Connection pooling, transactions, SQLite, model methods (`User.all`), migrations, generators (`winn create`), deployment |
 | v0.6.0 | Observability | Metrics module, live metrics dashboard (`winn metrics`), load testing (`winn bench`) |
-| v0.7.0 | Core Stdlib + Packages | File I/O, Regex, Timer, Retry, DateTime/String improvements, package system (`winn add`/`winn remove`) |
+| v0.7.0 | Core Stdlib + Packages | File I/O, Regex, Timer, Retry, DateTime/String, package system (`winn add`/`winn remove`), [winn-redis](https://github.com/gregwinn/winn-redis), [winn-mongodb](https://github.com/gregwinn/winn-mongodb), [winn-amqp](https://github.com/gregwinn/winn-amqp) |
 
 ---
 
 ## Coming Next
-
-### v0.7.5 — Packages
-
-Optional add-on packages installed with `winn add`. Each is a separate repo written in Winn.
-
-| Issue | Feature | Description |
-|-------|---------|-------------|
-| [#89](https://github.com/gregwinn/winn-lang/issues/89) | winn-redis | Redis client package |
-| [#90](https://github.com/gregwinn/winn-lang/issues/90) | winn-mongodb | MongoDB client package |
-| [#91](https://github.com/gregwinn/winn-lang/issues/91) | winn-amqp | RabbitMQ/AMQP client package |
 
 ### v0.8.0 — Web Framework
 
