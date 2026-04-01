@@ -55,7 +55,7 @@ db_config() ->
     maps:merge(maps:merge(Defaults, AppConfig), EtsConfig).
 
 read_ets_config() ->
-    Keys = [host, port, database, username, password, pool_size],
+    Keys = [host, port, database, username, password, pool_size, adapter],
     lists:foldl(fun(Key, Acc) ->
         case winn_config:get(repo, Key) of
             nil -> Acc;
@@ -64,10 +64,19 @@ read_ets_config() ->
     end, #{}, Keys).
 
 connect() ->
-    #{host := Host, port := Port, database := DB,
-      username := User, password := Pass} = db_config(),
-    epgsql:connect(#{host => Host, port => Port, database => DB,
-                     username => User, password => Pass}).
+    Config = db_config(),
+    case maps:get(adapter, Config, postgres) of
+        sqlite ->
+            winn_repo_sqlite:connect(Config);
+        _ ->
+            #{host := Host, port := Port, database := DB,
+              username := User, password := Pass} = Config,
+            epgsql:connect(#{host => Host, port => Port, database => DB,
+                             username => User, password => Pass})
+    end.
+
+adapter() ->
+    maps:get(adapter, db_config(), postgres).
 
 %% Query builder
 'query.new'(SchemaMod) ->

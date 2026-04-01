@@ -9,6 +9,7 @@ All notable changes to the Winn language are documented here.
 - **Transactions** — `Repo.transaction(fn() => ... end)` wraps operations in BEGIN/COMMIT/ROLLBACK
 - **Rails-style model methods** — schema modules auto-generate `all()`, `find(id)`, `find_by(field, value)`, `create(attrs)`, `delete(record)`, `count()`
 - **Extended query builder** — `query.order_by`, `query.select`, `query.count`, `Repo.aggregate` (sum/avg/min/max)
+- **SQLite support** — `Repo.configure(%{adapter: :sqlite, database: "app.db"})` with automatic SQL dialect translation
 
 ### Tooling
 - **`winn migrate`** — run pending database migrations with `schema_migrations` tracking
