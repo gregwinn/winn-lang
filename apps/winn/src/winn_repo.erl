@@ -3,9 +3,11 @@
     configure/1, start_pool/0, pool_status/0,
     insert/2, get/2, get/3, all/1, all/2,
     delete/1, update/1, execute/1, execute/2,
-    transaction/1, count/1,
+    transaction/1, count/1, aggregate/3,
     'query.new'/1, 'query.where'/3, 'query.limit'/2,
-    sql_for_insert/2, sql_for_select/2
+    'query.order_by'/3, 'query.select'/2, 'query.count'/1,
+    sql_for_insert/2, sql_for_select/2,
+    build_where/1
 ]).
 
 %% Configure the database connection from Winn:
@@ -69,7 +71,8 @@ connect() ->
 
 %% Query builder
 'query.new'(SchemaMod) ->
-    #{schema => SchemaMod, wheres => [], limit => all}.
+    #{schema => SchemaMod, wheres => [], limit => all,
+      order_by => none, select => all}.
 
 'query.where'(Query, Field, Value) ->
     Wheres = maps:get(wheres, Query),
@@ -77,6 +80,24 @@ connect() ->
 
 'query.limit'(Query, N) ->
     Query#{limit => N}.
+
+'query.order_by'(Query, Field, Direction) ->
+    Query#{order_by => {Field, Direction}}.
+
+'query.select'(Query, Fields) when is_list(Fields) ->
+    Query#{select => Fields}.
+
+'query.count'(Query) ->
+    #{schema := SchemaMod, wheres := Wheres} = Query,
+    Table = SchemaMod:'__schema__'(source),
+    {WhereSQL, Vals} = build_where(Wheres),
+    SQL = iolist_to_binary(["SELECT COUNT(*) FROM ", Table, WhereSQL]),
+    with_conn(fun(Conn) ->
+        case epgsql:equery(Conn, binary_to_list(SQL), Vals) of
+            {ok, _Cols, [{Count}]} -> {ok, Count};
+            {error, Reason}        -> {error, Reason}
+        end
+    end).
 
 %% SQL generation helpers (usable in tests without a DB)
 sql_for_insert(SchemaMod, Attrs) ->
@@ -152,6 +173,36 @@ all(SchemaMod) ->
         end
     end).
 
+all(SchemaMod, Wheres) when is_map(Wheres), is_map_key(schema, Wheres) ->
+    %% Query map from query builder
+    #{schema := _Mod, wheres := WherePairs} = Wheres,
+    OrderBy = maps:get(order_by, Wheres, none),
+    Limit = maps:get(limit, Wheres, all),
+    SelectFields = maps:get(select, Wheres, all),
+    Table = SchemaMod:'__schema__'(source),
+    {WhereSQL, Vals} = build_where(WherePairs),
+    SelectStr = case SelectFields of
+        all -> <<"*">>;
+        Fields -> iolist_to_binary(lists:join(<<", ">>,
+                    [atom_to_binary(F, utf8) || F <- Fields]))
+    end,
+    OrderSQL = case OrderBy of
+        none -> <<>>;
+        {Field, Dir} ->
+            DirStr = case Dir of asc -> <<"ASC">>; desc -> <<"DESC">>; _ -> <<"ASC">> end,
+            iolist_to_binary([" ORDER BY ", atom_to_binary(Field, utf8), " ", DirStr])
+    end,
+    LimitSQL = case Limit of
+        all -> <<>>;
+        N when is_integer(N) -> iolist_to_binary([" LIMIT ", integer_to_binary(N)])
+    end,
+    SQL = iolist_to_binary(["SELECT ", SelectStr, " FROM ", Table, WhereSQL, OrderSQL, LimitSQL]),
+    with_conn(fun(Conn) ->
+        case epgsql:equery(Conn, binary_to_list(SQL), Vals) of
+            {ok, Cols, Rows} -> {ok, [row_to_map_cols(Cols, R) || R <- Rows]};
+            {error, Reason}  -> {error, Reason}
+        end
+    end);
 all(SchemaMod, Wheres) ->
     {SQL, Vals} = sql_for_select(SchemaMod, Wheres),
     with_conn(fun(Conn) ->
@@ -168,6 +219,20 @@ count(SchemaMod) ->
         case epgsql:equery(Conn, binary_to_list(SQL), []) of
             {ok, _Cols, [{Count}]} -> {ok, Count};
             {error, Reason}        -> {error, Reason}
+        end
+    end).
+
+%% Aggregate: sum, avg, min, max
+aggregate(SchemaMod, Func, Field) when
+        Func =:= sum; Func =:= avg; Func =:= min; Func =:= max ->
+    Table = SchemaMod:'__schema__'(source),
+    FuncStr = string:uppercase(atom_to_list(Func)),
+    ColStr  = atom_to_binary(Field, utf8),
+    SQL = iolist_to_binary(["SELECT ", FuncStr, "(", ColStr, ") FROM ", Table]),
+    with_conn(fun(Conn) ->
+        case epgsql:equery(Conn, binary_to_list(SQL), []) of
+            {ok, _Cols, [{Val}]} -> {ok, Val};
+            {error, Reason}      -> {error, Reason}
         end
     end).
 
@@ -288,3 +353,12 @@ row_to_map_cols(Cols, Row) ->
     ColNames = [binary_to_atom(element(2, C), utf8) || C <- Cols],
     Values   = tuple_to_list(Row),
     maps:from_list(lists:zip(ColNames, Values)).
+
+build_where([]) ->
+    {<<>>, []};
+build_where(WherePairs) ->
+    KVs = lists:reverse(WherePairs),
+    Clauses = [iolist_to_binary([atom_to_binary(F, utf8), " = $", integer_to_binary(I)])
+               || {I, {F, _}} <- lists:zip(lists:seq(1, length(KVs)), KVs)],
+    Vals = [V || {_, V} <- KVs],
+    {iolist_to_binary([" WHERE ", lists:join(<<" AND ">>, Clauses)]), Vals}.
