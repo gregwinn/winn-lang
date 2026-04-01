@@ -116,10 +116,15 @@ Commands: `new`, `compile`, `run`, `start`, `test`, `docs`, `watch`, `create`/`c
 
 Use `/release patch|minor|major` Claude skill, or manually:
 1. Bump version in `apps/winn/src/winn.app.src`, `winn_cli.erl`, and `winn_repl.erl` fallbacks
-2. `rebar3 escriptize`
-3. Tag, push, `gh release create`
-4. Update `gregwinn/homebrew-winn` Formula with new URL + SHA256
-5. **Update `gregwinn/winn-lang-website`** — version in footer, features, code examples, roadmap (CRITICAL)
+2. Update CHANGELOG.md (`[Unreleased]` → `[version] - date`)
+3. `rebar3 escriptize` and verify version
+4. Tag, push, `gh release create`
+5. Update `gregwinn/homebrew-winn` Formula with new URL + SHA256
+6. **Update ALL docs** — version in README, getting-started, cli.md, CLAUDE.md test count (CRITICAL)
+7. **Update roadmap** — move shipped items, link to GH issues, NEVER leave stale plans (CRITICAL)
+8. **Update website** — version in footer + `build-docs.sh`, sync `docs/*.md`, push (CRITICAL)
+9. **Update VS Code extension** — if new syntax, bump version, publish to marketplace
+10. Close GitHub milestone
 
 ## External Dependencies
 

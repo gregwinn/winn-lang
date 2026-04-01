@@ -70,33 +70,57 @@ gh release create vNEW_VERSION --title "vNEW_VERSION" --generate-notes
   - Update `sha256` to new hash
 - Commit message: "Update winn to vNEW_VERSION"
 
-### 10. Update website (CRITICAL)
+### 10. Update ALL docs (CRITICAL)
+
+Update version references across ALL documentation files:
+- `README.md` — version in install verify section
+- `docs/getting-started.md` — version in verify and help text sections
+- `docs/cli.md` — version in `winn version` example
+- `docs/roadmap.md` — move shipped items to "What's Shipped" table, update "Coming Next" tables. Roadmap MUST link to GitHub issues, NEVER contain stale plans for shipped features.
+- `docs/orm.md` — if database features changed
+- `CLAUDE.md` — test count, CLI commands list
+
+### 11. Update website (CRITICAL)
 
 Run the `/website-sync` skill or manually:
 - Update version in footer of `/home/gregwinn/Projects/Personal/winn-lang-website/index.html`
+- Update version in `build-docs.sh` template footer
 - Add any new features to the features grid
-- Update roadmap section if planned items shipped
+- Sync `docs/*.md` from winn-lang to winn-lang-website: `cp docs/*.md ../winn-lang-website/docs/`
 - Commit and push the website repo
+- Verify deploy succeeds: `gh run list --repo gregwinn/winn-lang-website --limit 1`
 
-### 11. Close milestone (if applicable)
+### 12. Update VS Code extension (if syntax changed)
+
+If new keywords, operators, or syntax were added:
+- Update `syntaxes/winn.tmLanguage.json` in `gregwinn/language-winn-vscode`
+- Update `language-configuration.json` for folding/indentation
+- Bump `package.json` version
+- Clone, `npm install`, `npm run compile`, `npx @vscode/vsce publish`
+
+### 13. Close milestone (if applicable)
 
 If this is a minor/major release, check if there's a matching milestone to close:
 ```
 gh api repos/gregwinn/winn-lang/milestones?state=open
 ```
 
-### 12. Report
+### 14. Report
 
 Print a summary:
 - Old version → New version
 - GitHub release URL
 - Homebrew formula updated
-- Website updated
+- Docs updated (list files)
+- Website updated and deployed
+- VS Code extension (if updated)
+- Milestone closed (if applicable)
 - Remind: users can upgrade with `brew upgrade winn`
 
 ## Important
 
 - NEVER release without tests passing.
 - NEVER force-push tags.
-- NEVER skip the website update — this is critical.
+- NEVER skip docs, website, or roadmap updates — this is CRITICAL.
+- The roadmap MUST link to GitHub issues. NEVER leave stale planned sections for shipped features.
 - If any step fails, stop and report — do not continue with partial state.
