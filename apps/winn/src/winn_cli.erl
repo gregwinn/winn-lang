@@ -55,6 +55,9 @@ main(Args) ->
         {task, TaskArgs} ->
             run_task(TaskArgs);
 
+        {bench, BenchArgs} ->
+            run_bench(BenchArgs);
+
         {metrics, MetricsArgs} ->
             winn_metrics_dashboard:start(#{args => MetricsArgs});
 
@@ -103,6 +106,7 @@ parse_args(["watch" | Args])       -> {watch, Args};
 parse_args(["task" | Args])        -> {task, Args};
 parse_args(["create" | Args])      -> {create, Args};
 parse_args(["c" | Args])           -> {create, Args};
+parse_args(["bench" | Args])       -> {bench, Args};
 parse_args(["metrics" | Args])     -> {metrics, Args};
 parse_args(["release" | Args])     -> {release, Args};
 parse_args(["migrate" | Args])     -> {migrate, Args};
@@ -421,6 +425,43 @@ load_test_beams(Dir, _Compiled) ->
         end
     end, Beams).
 
+%% ── Benchmarking ────────────────────────────────────────────────────────
+
+run_bench([File | _]) ->
+    OutDir = "_build/bench",
+    ok = filelib:ensure_path(OutDir),
+    %% Compile src/ first (for project modules)
+    SrcFiles = filelib:wildcard("src/*.winn"),
+    lists:foreach(fun(F) ->
+        case winn:compile_file(F, OutDir) of
+            {ok, _} -> ok;
+            _ -> ok
+        end
+    end, SrcFiles),
+    %% Compile the bench file
+    case winn:compile_file(File, OutDir) of
+        {ok, _} ->
+            code:add_patha(OutDir),
+            ModAtom = detect_module_name(File),
+            code:purge(ModAtom),
+            code:load_file(ModAtom),
+            case erlang:function_exported(ModAtom, '__bench__', 0) of
+                true ->
+                    winn_bench:run_benchmarks(ModAtom),
+                    halt(0);
+                false ->
+                    io:format("Error: ~s does not export __bench__/0~n"
+                              "Use `use Winn.Bench` and define bench blocks.~n", [ModAtom]),
+                    halt(1)
+            end;
+        {error, Reason} ->
+            io:format("Error compiling ~s: ~p~n", [File, Reason]),
+            halt(1)
+    end;
+run_bench([]) ->
+    io:format("Usage: winn bench <file>~n"),
+    halt(0).
+
 %% ── Release / deployment ────────────────────────────────────────────────
 
 run_release(["--docker"]) ->
@@ -714,6 +755,7 @@ print_usage() ->
         "  winn watch              Watch files and hot-reload with live dashboard~n"
         "  winn watch --start      Watch + start the app~n"
         "  winn task <name>        Run a project task (e.g., winn task db:seed)~n"
+        "  winn bench <file>       Run load tests~n"
         "  winn metrics            Live metrics dashboard~n"
         "  winn release            Build a production release~n"
         "  winn release --docker   Generate a Dockerfile~n"
