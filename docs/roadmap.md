@@ -1,8 +1,8 @@
 # Winn Roadmap
 
-## Current Status — v0.3.2
+## Current Status — v0.5.0
 
-360 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
+475 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
 
 ### Completed
 
@@ -29,6 +29,16 @@
 | Tooling | CI (GitHub Actions), CHANGELOG, merge to main | v0.2.0 |
 | Tooling | REPL (`winn console`), dependency management (`winn deps`) | v0.2.0 |
 | Compiler | `module_info/0,1` generated for all compiled modules | v0.3.0 |
+| Language | Pipe assign (`\|>=`), triple-quoted strings, default params | v0.4.0 |
+| Language | Struct types, protocols with ETS dispatch | v0.4.0 |
+| Language | Significant newlines, block comments (`#\| ... \|#`) | v0.4.0 |
+| Database | Connection pooling, transactions, SQLite adapter | v0.5.0 |
+| Database | Rails-style model methods (`User.all`, `User.find`, `User.create`) | v0.5.0 |
+| Database | Extended query builder (order_by, select, count, aggregate) | v0.5.0 |
+| Database | Migrations (`winn migrate` / `winn rollback`) | v0.5.0 |
+| Tooling | Code generators (`winn create` / `winn c`) | v0.5.0 |
+| Tooling | CLI task runner (`winn task db:seed`) | v0.5.0 |
+| Tooling | Deployment (`winn release` / `winn release --docker`) | v0.5.0 |
 
 ---
 
@@ -507,15 +517,15 @@ N10 (newlines) → N12 (structs) → N13 (protocols) → N5 (import/alias)
 | N3 | Package management (winn deps) | **done** (v0.2.0) |
 | N4 | Testing framework (winn test) | **done** (v0.3.0) |
 | N5 | Import and alias | **done** (v0.3.0) |
-| N6 | CLI task runner (winn task) | planned |
+| N6 | CLI task runner (winn task) | **done** (v0.5.0) |
 | N7 | Documentation generator (winn docs) | **done** (v0.3.0) |
 | N8 | Hot code reloading (winn watch) | **done** (v0.3.0) |
-| N9 | Database migrations | planned |
-| N10 | Significant newlines | planned |
-| N11 | Pipe assign (\|>=) | planned |
-| N12 | Struct types | planned |
-| N13 | Protocols / behaviours | planned |
-| N14 | Deployment (winn release) | planned |
-| E1 | Project website | planned |
+| N9 | Database migrations | **done** (v0.5.0) |
+| N10 | Significant newlines | **done** (v0.4.0) |
+| N11 | Pipe assign (\|>=) | **done** (v0.4.0) |
+| N12 | Struct types | **done** (v0.4.0) |
+| N13 | Protocols / behaviours | **done** (v0.4.0) |
+| N14 | Deployment (winn release) | **done** (v0.5.0) |
+| E1 | Project website | **done** (v0.3.0) |
 | E2 | Example projects | planned |
 | E3 | Package registry | planned |

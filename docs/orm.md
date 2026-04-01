@@ -1,6 +1,6 @@
 # Winn ORM
 
-Winn includes a built-in ORM for PostgreSQL backed by [epgsql](https://github.com/epgsql/epgsql).
+Winn includes a built-in ORM supporting PostgreSQL and SQLite. Rails-style model methods, connection pooling, transactions, migrations, and an extensible query builder.
 
 ## Configuration
 
