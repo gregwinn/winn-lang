@@ -10,6 +10,7 @@ All notable changes to the Winn language are documented here.
 - **BEAM VM stats** — `Metrics.beam_stats()` returns process count, memory, schedulers, uptime
 - **Snapshots** — `Metrics.snapshot()` and `Metrics.http_snapshot()` for reading all metrics
 - **`winn metrics`** — live terminal dashboard showing HTTP stats, BEAM health, custom metrics
+- **`winn bench`** — built-in load testing with concurrent workers, P50/P95/P99 latency stats
 
 ## [0.5.0] - 2026-04-01
 
