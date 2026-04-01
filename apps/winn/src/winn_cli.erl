@@ -767,7 +767,7 @@ is_tty() ->
 get_version() ->
     case application:get_key(winn, vsn) of
         {ok, Vsn} -> Vsn;
-        _         -> "0.6.0"
+        _         -> "0.7.0"
     end.
 
 print_version() ->
