@@ -3,7 +3,7 @@
     configure/1, start_pool/0, pool_status/0,
     insert/2, get/2, get/3, all/1, all/2,
     delete/1, update/1, execute/1, execute/2,
-    transaction/1,
+    transaction/1, count/1,
     'query.new'/1, 'query.where'/3, 'query.limit'/2,
     sql_for_insert/2, sql_for_select/2
 ]).
@@ -158,6 +158,16 @@ all(SchemaMod, Wheres) ->
         case epgsql:equery(Conn, binary_to_list(SQL), Vals) of
             {ok, Cols, Rows} -> {ok, [row_to_map_cols(Cols, R) || R <- Rows]};
             {error, Reason}  -> {error, Reason}
+        end
+    end).
+
+count(SchemaMod) ->
+    Table = SchemaMod:'__schema__'(source),
+    SQL   = iolist_to_binary(["SELECT COUNT(*) FROM ", Table]),
+    with_conn(fun(Conn) ->
+        case epgsql:equery(Conn, binary_to_list(SQL), []) of
+            {ok, _Cols, [{Count}]} -> {ok, Count};
+            {error, Reason}        -> {error, Reason}
         end
     end).
 

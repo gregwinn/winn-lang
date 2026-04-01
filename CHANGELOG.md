@@ -7,6 +7,7 @@ All notable changes to the Winn language are documented here.
 ### Database
 - **Connection pooling** — `Repo.configure(%{pool_size: 10})` starts a GenServer-based connection pool; connections are checked out/in automatically
 - **Transactions** — `Repo.transaction(fn() => ... end)` wraps operations in BEGIN/COMMIT/ROLLBACK
+- **Rails-style model methods** — schema modules auto-generate `all()`, `find(id)`, `find_by(field, value)`, `create(attrs)`, `delete(record)`, `count()`
 
 ### Tooling
 - **`winn task <name>`** — run project tasks from the CLI with Rails-style colon syntax (e.g., `winn task db:migrate`)

@@ -46,7 +46,7 @@ transform_form({module, Line, Name, Body}) ->
     ImplFns = [transform_function(F)
                || F <- lists:append([expand_impl_def(ID, Name) || ID <- ImplDefs])],
     SchemaFns = [transform_function(F)
-                 || F <- lists:append([expand_schema_def(SD) || SD <- SchemaDefs])],
+                 || F <- lists:append([expand_schema_def(SD, Name) || SD <- SchemaDefs])],
 
     %% Expand default parameters into multiple function clauses.
     ExpandedFns = lists:flatmap(fun expand_default_params/1, Fns),
@@ -267,7 +267,9 @@ expand_impl_def({impl_def, L, ProtocolName, MethodDefs}, ModName) ->
 
 %% ── Schema definition expansion ──────────────────────────────────────────
 
-expand_schema_def({schema_def, L, TableBin, Fields}) ->
+expand_schema_def({schema_def, L, TableBin, Fields}, ModName) ->
+    ModAtom = lower_module_atom(ModName),
+
     %% __schema__(:source) -> table name binary
     SourceFn = {function, L, '__schema__', [{pat_atom, L, source}],
                 [{string, L, TableBin}]},
@@ -288,7 +290,35 @@ expand_schema_def({schema_def, L, TableBin, Fields}) ->
                  {var, L, attrs}
              ]}]},
 
-    [SourceFn, FieldsFn, TypesFn, NewFn].
+    %% ── Rails-style model query methods ─────────────────────────────
+    %% all()         -> Repo.all(ModName)
+    AllFn = {function, L, all, [],
+             [{dot_call, L, 'Repo', all, [{atom, L, ModAtom}]}]},
+
+    %% find(id)      -> Repo.get(ModName, id)
+    FindFn = {function, L, find, [{var, L, id}],
+              [{dot_call, L, 'Repo', get, [{atom, L, ModAtom}, {var, L, id}]}]},
+
+    %% find_by(field, value) -> Repo.get(ModName, field, value)
+    FindByFn = {function, L, find_by, [{var, L, field}, {var, L, value}],
+                [{dot_call, L, 'Repo', get, [
+                    {atom, L, ModAtom}, {var, L, field}, {var, L, value}
+                ]}]},
+
+    %% create(attrs)  -> Repo.insert(ModName, attrs)
+    CreateFn = {function, L, create, [{var, L, attrs}],
+                [{dot_call, L, 'Repo', insert, [{atom, L, ModAtom}, {var, L, attrs}]}]},
+
+    %% delete(record) -> Repo.delete(record)
+    DeleteFn = {function, L, delete, [{var, L, record}],
+                [{dot_call, L, 'Repo', delete, [{var, L, record}]}]},
+
+    %% count()        -> Repo.count(ModName)
+    CountFn = {function, L, count, [],
+               [{dot_call, L, 'Repo', count, [{atom, L, ModAtom}]}]},
+
+    [SourceFn, FieldsFn, TypesFn, NewFn,
+     AllFn, FindFn, FindByFn, CreateFn, DeleteFn, CountFn].
 
 %% ── Function transformation ────────────────────────────────────────────────
 

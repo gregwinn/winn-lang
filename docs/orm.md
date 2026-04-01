@@ -53,6 +53,34 @@ end)
 
 Returns `{:ok, result}` on success. On any error or exception, the transaction is rolled back and returns `{:error, reason}`.
 
+### Model Query Methods
+
+Schema modules automatically get Rails-style query methods:
+
+```winn
+module User
+  use Winn.Schema
+
+  schema "users" do
+    field :name, :string
+    field :email, :string
+    field :age, :integer
+  end
+end
+
+# Query directly on the model — no need to reference Repo
+users = User.all()
+user  = User.find(1)
+user  = User.find_by(:email, "alice@example.com")
+
+{:ok, user} = User.create(%{name: "Alice", email: "alice@example.com"})
+User.delete(user)
+
+count = User.count()
+```
+
+These are generated at compile time — each method is a one-line delegation to the corresponding Repo function. You can still use `Repo.all(User)` directly if you prefer.
+
 You can also configure individual keys:
 
 ```winn
