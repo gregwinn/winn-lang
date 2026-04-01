@@ -52,6 +52,25 @@ main(Args) ->
         {create, CreateArgs} ->
             run_create(CreateArgs);
 
+        {pkg_add, [Name]} ->
+            winn_package:add(Name),
+            halt(0);
+        {pkg_add, _} ->
+            io:format("Usage: winn add <package-name>~n"),
+            halt(1);
+        {pkg_remove, [Name]} ->
+            winn_package:remove(Name),
+            halt(0);
+        {pkg_remove, _} ->
+            io:format("Usage: winn remove <package-name>~n"),
+            halt(1);
+        pkg_list ->
+            winn_package:list(),
+            halt(0);
+        pkg_install ->
+            winn_package:install(),
+            halt(0);
+
         {task, TaskArgs} ->
             run_task(TaskArgs);
 
@@ -105,6 +124,10 @@ parse_args(["docs" | Args])        -> {docs, Args};
 parse_args(["watch" | Args])       -> {watch, Args};
 parse_args(["task" | Args])        -> {task, Args};
 parse_args(["create" | Args])      -> {create, Args};
+parse_args(["add" | Args])         -> {pkg_add, Args};
+parse_args(["remove" | Args])      -> {pkg_remove, Args};
+parse_args(["packages" | _])       -> pkg_list;
+parse_args(["install" | _])        -> pkg_install;
 parse_args(["c" | Args])           -> {create, Args};
 parse_args(["bench" | Args])       -> {bench, Args};
 parse_args(["metrics" | Args])     -> {metrics, Args};
@@ -225,12 +248,14 @@ scaffold(AppName) ->
     WinnFile = SrcDir ++ "/" ++ BaseName ++ ".winn",
     RebarFile = AppName ++ "/rebar.config",
     GitignoreFile = AppName ++ "/.gitignore",
+    PackageFile = AppName ++ "/package.json",
     try
         ok = file:make_dir(AppName),
         ok = file:make_dir(SrcDir),
         ok = file:write_file(WinnFile, starter_winn(AppName)),
         ok = file:write_file(RebarFile, starter_rebar(AppName)),
         ok = file:write_file(GitignoreFile, gitignore_content()),
+        ok = file:write_file(PackageFile, starter_package_json(AppName)),
         ok
     catch
         error:{badmatch, {error, Reason}} ->
@@ -255,7 +280,17 @@ starter_rebar(AppName) ->
     ).
 
 gitignore_content() ->
-    "_build/\nebin/\n*.beam\n".
+    "_build/\nebin/\n*.beam\n_packages/\n".
+
+starter_package_json(AppName) ->
+    BaseName = filename:basename(AppName),
+    io_lib:format(
+        "{\n"
+        "  \"name\": \"~s\",\n"
+        "  \"version\": \"0.1.0\",\n"
+        "  \"packages\": {}\n"
+        "}\n",
+        [BaseName]).
 
 %% ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -759,6 +794,10 @@ print_usage() ->
         "  winn metrics            Live metrics dashboard~n"
         "  winn release            Build a production release~n"
         "  winn release --docker   Generate a Dockerfile~n"
+        "  winn add <package>      Install a Winn package~n"
+        "  winn remove <package>   Remove a package~n"
+        "  winn packages           List installed packages~n"
+        "  winn install            Install all packages from package.json~n"
         "  winn create <type>      Generate code (model, migration, task, router, scaffold)~n"
         "  winn c <type>           Shorthand for winn create~n"
         "  winn migrate            Run pending database migrations~n"
