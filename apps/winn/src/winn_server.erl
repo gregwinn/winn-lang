@@ -20,7 +20,7 @@
 %%   Server.path(conn)              -> binary
 
 -module(winn_server).
--export([start/2, stop/0]).
+-export([start/2, start/3, stop/0, build_static_routes/1]).
 -export([json/2, json/3, text/2, text/3, send/4]).
 -export([body_params/1, path_param/2, query_param/2, header/2]).
 -export([method/1, path/1]).
@@ -32,8 +32,37 @@
 
 start(RouterModule, Port) when is_atom(RouterModule), is_integer(Port) ->
     application:ensure_all_started(cowboy),
+    %% Extract static routes from the router's routes/0
+    Routes = case erlang:function_exported(RouterModule, routes, 0) of
+        true  -> RouterModule:routes();
+        false -> []
+    end,
+    StaticRoutes = build_static_routes(Routes),
+    %% Catch-all route for the Winn router handler
+    CatchAll = {'_', winn_router, #{router => RouterModule}},
     Dispatch = cowboy_router:compile([
-        {'_', [{'_', winn_router, #{router => RouterModule}}]}
+        {'_', StaticRoutes ++ [CatchAll]}
+    ]),
+    cowboy:start_clear(?LISTENER, [{port, Port}], #{
+        env => #{dispatch => Dispatch}
+    }).
+
+%% Server.start(RouterModule, Port, Opts) — with static directory option
+start(RouterModule, Port, Opts) when is_atom(RouterModule), is_integer(Port), is_map(Opts) ->
+    application:ensure_all_started(cowboy),
+    Routes = case erlang:function_exported(RouterModule, routes, 0) of
+        true  -> RouterModule:routes();
+        false -> []
+    end,
+    %% Add explicit static dir from opts
+    ExtraStatic = case maps:get(static, Opts, undefined) of
+        undefined -> [];
+        {UrlPath, Dir} -> [{UrlPath, Dir}]
+    end,
+    StaticRoutes = build_static_routes(Routes ++ [{static, P, D} || {P, D} <- ExtraStatic]),
+    CatchAll = {'_', winn_router, #{router => RouterModule}},
+    Dispatch = cowboy_router:compile([
+        {'_', StaticRoutes ++ [CatchAll]}
     ]),
     cowboy:start_clear(?LISTENER, [{port, Port}], #{
         env => #{dispatch => Dispatch}
@@ -128,3 +157,37 @@ prepare_json(nil) ->
     null;
 prepare_json(Other) ->
     Other.
+
+%% ── Static file routing ────────────────────────────────────────────────
+%% Converts {:static, "/public", "static/"} route tuples into
+%% Cowboy-compatible static file dispatch rules.
+
+build_static_routes(Routes) ->
+    lists:filtermap(fun
+        ({static, UrlPrefix, Dir}) ->
+            build_one_static(UrlPrefix, Dir);
+        (_) ->
+            false
+    end, Routes).
+
+build_one_static(UrlPrefix, Dir) ->
+    %% Convert Winn path prefix to Cowboy match pattern
+    %% "/public" -> "/public/[...]"
+    Prefix = case is_binary(UrlPrefix) of
+        true  -> binary_to_list(UrlPrefix);
+        false -> UrlPrefix
+    end,
+    DirStr = case is_binary(Dir) of
+        true  -> binary_to_list(Dir);
+        false -> Dir
+    end,
+    %% Ensure directory exists
+    AbsDir = filename:absname(DirStr),
+    case filelib:is_dir(AbsDir) of
+        true ->
+            Pattern = Prefix ++ "/[...]",
+            {true, {Pattern, cowboy_static, {dir, AbsDir,
+                [{mimetypes, cow_mimetypes, all}]}}};
+        false ->
+            false
+    end.
