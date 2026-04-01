@@ -4,6 +4,9 @@ All notable changes to the Winn language are documented here.
 
 ## [Unreleased]
 
+### Database
+- **Connection pooling** — `Repo.configure(%{pool_size: 10})` starts a GenServer-based connection pool; connections are checked out/in automatically
+
 ### Tooling
 - **`winn task <name>`** — run project tasks from the CLI with Rails-style colon syntax (e.g., `winn task db:migrate`)
 

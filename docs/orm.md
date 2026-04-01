@@ -14,15 +14,30 @@ module MyApp
       port: 5432,
       database: "my_app_dev",
       username: "postgres",
-      password: "secret"
+      password: "secret",
+      pool_size: 10
     })
 
-    # Now Repo.insert, Repo.all, etc. use this connection
+    # Connection pool starts automatically when pool_size is set
+    # All Repo operations checkout/checkin connections from the pool
   end
 end
 ```
 
 Call `Repo.configure` early in your app (e.g., in `main()`) before any database operations. Configuration is stored in the Config ETS table and persists for the lifetime of the VM.
+
+### Connection Pool
+
+When `pool_size` is set, a GenServer-based connection pool starts automatically. Connections are reused across queries instead of opening a new one per operation.
+
+```winn
+Repo.configure(%{pool_size: 10})   # pool starts with 10 connections
+
+# Check pool status
+Repo.pool_status()  # => {:ok, %{idle: 8, busy: 2, max: 10}}
+```
+
+Without `pool_size`, Repo falls back to opening/closing a connection per query (backward compatible).
 
 You can also configure individual keys:
 

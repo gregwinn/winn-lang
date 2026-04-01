@@ -1,6 +1,7 @@
 -module(winn_repo).
 -export([
-    configure/1, insert/2, get/2, get/3, all/1, all/2,
+    configure/1, start_pool/0, pool_status/0,
+    insert/2, get/2, get/3, all/1, all/2,
     delete/1, update/1, execute/1, execute/2,
     'query.new'/1, 'query.where'/3, 'query.limit'/2,
     sql_for_insert/2, sql_for_select/2
@@ -13,7 +14,29 @@ configure(Config) when is_map(Config) ->
     maps:fold(fun(Key, Val, _) ->
         winn_config:put(repo, Key, Val)
     end, ok, Config),
+    %% Auto-start the connection pool if pool_size is configured
+    case maps:get(pool_size, Config, undefined) of
+        undefined -> ok;
+        _ -> start_pool()
+    end,
     ok.
+
+%% Start the connection pool with current config.
+start_pool() ->
+    Config = db_config(),
+    PoolSize = maps:get(pool_size, Config, 5),
+    FullConfig = Config#{pool_size => PoolSize},
+    case whereis(winn_pool) of
+        undefined -> winn_pool:start(FullConfig);
+        _Pid      -> ok  %% already running
+    end.
+
+%% Get pool status (idle/busy/max connections).
+pool_status() ->
+    case whereis(winn_pool) of
+        undefined -> {error, pool_not_started};
+        _Pid      -> {ok, winn_pool:status()}
+    end.
 
 db_config() ->
     %% Read from Config ETS first, fall back to application env, then defaults.
@@ -29,7 +52,7 @@ db_config() ->
     maps:merge(maps:merge(Defaults, AppConfig), EtsConfig).
 
 read_ets_config() ->
-    Keys = [host, port, database, username, password],
+    Keys = [host, port, database, username, password, pool_size],
     lists:foldl(fun(Key, Acc) ->
         case winn_config:get(repo, Key) of
             nil -> Acc;
@@ -187,13 +210,34 @@ execute(SQL, Params) when is_binary(SQL), is_list(Params) ->
     end).
 
 with_conn(Fun) ->
-    case connect() of
-        {ok, Conn} ->
-            Result = Fun(Conn),
-            epgsql:close(Conn),
-            Result;
-        {error, Reason} ->
-            {error, {connection_failed, Reason}}
+    case whereis(winn_pool) of
+        undefined ->
+            %% No pool — direct connection (backward compatible)
+            case connect() of
+                {ok, Conn} ->
+                    Result = Fun(Conn),
+                    epgsql:close(Conn),
+                    Result;
+                {error, Reason} ->
+                    {error, {connection_failed, Reason}}
+            end;
+        _Pid ->
+            %% Pool available — checkout/checkin
+            case winn_pool:checkout() of
+                {ok, Conn} ->
+                    try
+                        Result = Fun(Conn),
+                        winn_pool:checkin(Conn),
+                        Result
+                    catch Class:Reason:Stack ->
+                        winn_pool:checkin(Conn),
+                        erlang:raise(Class, Reason, Stack)
+                    end;
+                {error, pool_exhausted} ->
+                    {error, {connection_failed, pool_exhausted}};
+                {error, Reason} ->
+                    {error, {connection_failed, Reason}}
+            end
     end.
 
 row_to_map(SchemaMod, Row) ->
