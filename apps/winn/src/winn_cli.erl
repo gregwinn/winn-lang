@@ -2,7 +2,7 @@
 %% Escript entry point for the Winn CLI.
 
 -module(winn_cli).
--export([main/1, parse_args/1, scaffold/1, task_name_to_module/1]).
+-export([main/1, parse_args/1, scaffold/1, task_name_to_module/1, generate_dockerfile/0]).
 
 %% ── Entry point ───────────────────────────────────────────────────────────
 
@@ -55,6 +55,9 @@ main(Args) ->
         {task, TaskArgs} ->
             run_task(TaskArgs);
 
+        {release, ReleaseArgs} ->
+            run_release(ReleaseArgs);
+
         {migrate, MigrateArgs} ->
             run_migrate(MigrateArgs);
 
@@ -97,6 +100,7 @@ parse_args(["watch" | Args])       -> {watch, Args};
 parse_args(["task" | Args])        -> {task, Args};
 parse_args(["create" | Args])      -> {create, Args};
 parse_args(["c" | Args])           -> {create, Args};
+parse_args(["release" | Args])     -> {release, Args};
 parse_args(["migrate" | Args])     -> {migrate, Args};
 parse_args(["rollback" | Args])    -> {rollback, Args};
 parse_args(["deps" | Sub])         -> {deps, Sub};
@@ -413,6 +417,66 @@ load_test_beams(Dir, _Compiled) ->
         end
     end, Beams).
 
+%% ── Release / deployment ────────────────────────────────────────────────
+
+run_release(["--docker"]) ->
+    generate_dockerfile(),
+    halt(0);
+run_release([]) ->
+    io:format("Building release...~n"),
+    %% Compile all Winn source first
+    SrcFiles = filelib:wildcard("src/*.winn"),
+    ok = filelib:ensure_path("ebin"),
+    lists:foreach(fun(F) ->
+        case winn:compile_file(F, "ebin") of
+            {ok, _} -> ok;
+            {error, _} -> ok
+        end
+    end, SrcFiles),
+    %% Run rebar3 release
+    case os:cmd("rebar3 as prod release 2>&1") of
+        Output ->
+            io:format("~s~n", [Output]),
+            case string:find(Output, "Release successfully") of
+                nomatch ->
+                    %% Try tar if release not configured
+                    io:format("~nTrying tarball...~n"),
+                    TarOutput = os:cmd("rebar3 as prod tar 2>&1"),
+                    io:format("~s~n", [TarOutput]),
+                    halt(0);
+                _ ->
+                    halt(0)
+            end
+    end;
+run_release(_) ->
+    io:format("Usage:~n"
+              "  winn release            Build a production release~n"
+              "  winn release --docker   Generate a Dockerfile~n"),
+    halt(0).
+
+generate_dockerfile() ->
+    Content = "FROM erlang:28-slim AS builder\n"
+              "WORKDIR /app\n"
+              "COPY rebar.config rebar.lock* ./\n"
+              "RUN rebar3 get-deps\n"
+              "COPY . .\n"
+              "RUN rebar3 as prod release\n"
+              "\n"
+              "FROM debian:bookworm-slim\n"
+              "RUN apt-get update && apt-get install -y libncurses5 libssl3 && rm -rf /var/lib/apt/lists/*\n"
+              "WORKDIR /app\n"
+              "COPY --from=builder /app/_build/prod/rel/ ./rel/\n"
+              "ENV PORT=4000\n"
+              "EXPOSE 4000\n"
+              "CMD [\"./rel/*/bin/*\", \"foreground\"]\n",
+    case filelib:is_file("Dockerfile") of
+        true ->
+            io:format("  exists  Dockerfile~n");
+        false ->
+            ok = file:write_file("Dockerfile", Content),
+            io:format("  create  Dockerfile~n")
+    end.
+
 %% ── Code generators ─────────────────────────────────────────────────────
 
 run_create(["model" | Rest]) when length(Rest) >= 1 ->
@@ -646,6 +710,8 @@ print_usage() ->
         "  winn watch              Watch files and hot-reload with live dashboard~n"
         "  winn watch --start      Watch + start the app~n"
         "  winn task <name>        Run a project task (e.g., winn task db:seed)~n"
+        "  winn release            Build a production release~n"
+        "  winn release --docker   Generate a Dockerfile~n"
         "  winn create <type>      Generate code (model, migration, task, router, scaffold)~n"
         "  winn c <type>           Shorthand for winn create~n"
         "  winn migrate            Run pending database migrations~n"

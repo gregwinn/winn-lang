@@ -15,6 +15,7 @@ All notable changes to the Winn language are documented here.
 - **`winn migrate`** — run pending database migrations with `schema_migrations` tracking
 - **`winn rollback`** — rollback migrations with `--step N` support
 - **`winn migrate --status`** — show applied vs pending migrations
+- **`winn release`** — build production releases, `--docker` generates a Dockerfile
 - **`winn create` / `winn c`** — code generators for model, migration, task, router, scaffold
 - **`winn task <name>`** — run project tasks from the CLI with Rails-style colon syntax (e.g., `winn task db:seed`)
 
