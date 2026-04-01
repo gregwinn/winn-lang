@@ -49,6 +49,9 @@ main(Args) ->
             Opts = #{start => lists:member("--start", WatchArgs)},
             winn_watch:start(Opts);
 
+        {create, CreateArgs} ->
+            run_create(CreateArgs);
+
         {task, TaskArgs} ->
             run_task(TaskArgs);
 
@@ -92,6 +95,8 @@ parse_args(["docs"])                -> {docs, []};
 parse_args(["docs" | Args])        -> {docs, Args};
 parse_args(["watch" | Args])       -> {watch, Args};
 parse_args(["task" | Args])        -> {task, Args};
+parse_args(["create" | Args])      -> {create, Args};
+parse_args(["c" | Args])           -> {create, Args};
 parse_args(["migrate" | Args])     -> {migrate, Args};
 parse_args(["rollback" | Args])    -> {rollback, Args};
 parse_args(["deps" | Sub])         -> {deps, Sub};
@@ -408,6 +413,34 @@ load_test_beams(Dir, _Compiled) ->
         end
     end, Beams).
 
+%% ── Code generators ─────────────────────────────────────────────────────
+
+run_create(["model" | Rest]) when length(Rest) >= 1 ->
+    winn_generator:generate(model, Rest),
+    halt(0);
+run_create(["migration" | Rest]) when length(Rest) >= 1 ->
+    winn_generator:generate(migration, Rest),
+    halt(0);
+run_create(["task" | [Name]]) ->
+    winn_generator:generate(task, [Name]),
+    halt(0);
+run_create(["router" | [Name]]) ->
+    winn_generator:generate(router, [Name]),
+    halt(0);
+run_create(["scaffold" | Rest]) when length(Rest) >= 1 ->
+    winn_generator:generate(scaffold, Rest),
+    halt(0);
+run_create(_) ->
+    io:format("Usage:~n"
+              "  winn create model <Name> [field:type ...]~n"
+              "  winn create migration <Name> [field:type ...]~n"
+              "  winn create task <name>~n"
+              "  winn create router <Name>~n"
+              "  winn create scaffold <Name> [field:type ...]~n"
+              "~n"
+              "Shorthand: winn c model User name:string~n"),
+    halt(0).
+
 %% ── Migration commands ──────────────────────────────────────────────────
 
 run_migrate(["--status"]) ->
@@ -613,6 +646,8 @@ print_usage() ->
         "  winn watch              Watch files and hot-reload with live dashboard~n"
         "  winn watch --start      Watch + start the app~n"
         "  winn task <name>        Run a project task (e.g., winn task db:seed)~n"
+        "  winn create <type>      Generate code (model, migration, task, router, scaffold)~n"
+        "  winn c <type>           Shorthand for winn create~n"
         "  winn migrate            Run pending database migrations~n"
         "  winn rollback           Rollback last database migration~n"
         "  winn deps               Manage dependencies~n"
