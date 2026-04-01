@@ -2,7 +2,7 @@
 
 All notable changes to the Winn language are documented here.
 
-## [Unreleased]
+## [0.5.0] - 2026-04-01
 
 ### Database
 - **Connection pooling** — `Repo.configure(%{pool_size: 10})` starts a GenServer-based connection pool; connections are checked out/in automatically
