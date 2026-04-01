@@ -2,6 +2,14 @@
 
 All notable changes to the Winn language are documented here.
 
+## [Unreleased]
+
+### Observability
+- **Metrics module** — `Metrics.increment`, `Metrics.set`, `Metrics.observe`, `Metrics.time` for counters, gauges, histograms
+- **HTTP metrics** — `Metrics.record_http` tracks per-endpoint request count, latency percentiles, error rates
+- **BEAM VM stats** — `Metrics.beam_stats()` returns process count, memory, schedulers, uptime
+- **Snapshots** — `Metrics.snapshot()` and `Metrics.http_snapshot()` for reading all metrics
+
 ## [0.5.0] - 2026-04-01
 
 ### Database
