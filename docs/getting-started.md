@@ -573,6 +573,29 @@ winn bench bench/api_bench.winn
 
 ---
 
+## 21. Packages
+
+Install optional add-on packages with `winn add`:
+
+```sh
+winn add redis       # install Redis client
+winn add mongodb     # install MongoDB client
+winn add amqp        # install RabbitMQ client
+winn packages        # list installed
+```
+
+Use them in your code:
+
+```winn
+Redis.configure(%{url: "redis://localhost:6379"})
+Redis.set("key", "value")
+{:ok, val} = Redis.get("key")
+```
+
+Packages are written in Winn and declared in `package.json`. Anyone can create and share packages.
+
+---
+
 ## Next Steps
 
 - [Language Guide](language.md) — full syntax reference
