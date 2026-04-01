@@ -9,6 +9,7 @@ All notable changes to the Winn language are documented here.
 - **HTTP metrics** — `Metrics.record_http` tracks per-endpoint request count, latency percentiles, error rates
 - **BEAM VM stats** — `Metrics.beam_stats()` returns process count, memory, schedulers, uptime
 - **Snapshots** — `Metrics.snapshot()` and `Metrics.http_snapshot()` for reading all metrics
+- **`winn metrics`** — live terminal dashboard showing HTTP stats, BEAM health, custom metrics
 
 ## [0.5.0] - 2026-04-01
 
