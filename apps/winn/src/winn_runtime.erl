@@ -84,7 +84,15 @@
     'datetime.to_iso8601'/1,
     'datetime.from_iso8601'/1,
     'datetime.diff'/2,
-    'datetime.format'/2
+    'datetime.format'/2,
+    'datetime.add'/3,
+    'datetime.before?'/2,
+    'datetime.after?'/2,
+    %% String additions
+    'string.pad_left'/3,
+    'string.pad_right'/3,
+    'string.repeat'/2,
+    'string.byte_size'/1
 ]).
 
 %% ── IO ─────────────────────────────────────────────────────────────────────
@@ -161,7 +169,13 @@
     end.
 
 'string.slice'(Bin, Start, Length) when is_binary(Bin), is_integer(Start), is_integer(Length) ->
-    binary:part(Bin, Start, Length).
+    Size = byte_size(Bin),
+    case Start >= Size of
+        true  -> <<>>;
+        false ->
+            ActualLen = min(Length, Size - Start),
+            binary:part(Bin, Start, ActualLen)
+    end.
 
 %% ── Enum ─────────────────────────────────────────────────────────────────
 
@@ -313,8 +327,13 @@ inspect(Term) ->
         Val   -> list_to_binary(Val)
     end.
 
-'system.get_env'(Key, Default) when is_binary(Key), is_binary(Default) ->
-    case os:getenv(binary_to_list(Key)) of
+'system.get_env'(Name, Default) when is_binary(Name) ->
+    case os:getenv(binary_to_list(Name)) of
+        false -> Default;
+        Val   -> list_to_binary(Val)
+    end;
+'system.get_env'(Name, Default) when is_list(Name) ->
+    case os:getenv(Name) of
         false -> Default;
         Val   -> list_to_binary(Val)
     end.
@@ -382,3 +401,43 @@ format_dt([$%, $S | Rest], Y, Mo, D, H, Mi, S) ->
     [io_lib:format("~2..0B", [S]) | format_dt(Rest, Y, Mo, D, H, Mi, S)];
 format_dt([C | Rest], Y, Mo, D, H, Mi, S) ->
     [C | format_dt(Rest, Y, Mo, D, H, Mi, S)].
+
+%% DateTime.add(timestamp, N, :seconds/:minutes/:hours/:days)
+'datetime.add'(Timestamp, N, Unit) when is_integer(Timestamp), is_integer(N) ->
+    Seconds = case Unit of
+        seconds -> N;
+        minutes -> N * 60;
+        hours   -> N * 3600;
+        days    -> N * 86400
+    end,
+    Timestamp + Seconds.
+
+'datetime.before?'(T1, T2) when is_integer(T1), is_integer(T2) -> T1 < T2.
+'datetime.after?'(T1, T2) when is_integer(T1), is_integer(T2) -> T1 > T2.
+
+%% String additions
+'string.pad_left'(Bin, Width, PadChar) when is_binary(Bin), is_integer(Width), is_binary(PadChar) ->
+    Len = byte_size(Bin),
+    case Len >= Width of
+        true  -> Bin;
+        false ->
+            PadLen = Width - Len,
+            Pad = binary:copy(PadChar, PadLen),
+            <<Pad/binary, Bin/binary>>
+    end.
+
+'string.pad_right'(Bin, Width, PadChar) when is_binary(Bin), is_integer(Width), is_binary(PadChar) ->
+    Len = byte_size(Bin),
+    case Len >= Width of
+        true  -> Bin;
+        false ->
+            PadLen = Width - Len,
+            Pad = binary:copy(PadChar, PadLen),
+            <<Bin/binary, Pad/binary>>
+    end.
+
+'string.repeat'(Bin, N) when is_binary(Bin), is_integer(N), N >= 0 ->
+    binary:copy(Bin, N).
+
+'string.byte_size'(Bin) when is_binary(Bin) ->
+    byte_size(Bin).
