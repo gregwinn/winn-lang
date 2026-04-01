@@ -1,162 +1,89 @@
 # Winn CLI
 
-The `winn` command-line tool creates, compiles, and runs Winn programs.
-
-## Installation
-
-### Homebrew (recommended)
+## Install
 
 ```sh
-brew tap gregwinn/winn
-brew install winn
+brew tap gregwinn/winn && brew install winn
 ```
 
-### From Source
+## Quick Reference
 
-```sh
-git clone https://github.com/gregwinn/winn-lang.git
-cd winn-lang
-rebar3 escriptize
-cp _build/default/bin/winn /usr/local/bin/
-```
+| Command | Description |
+|---------|-------------|
+| [`winn new <name>`](#winn-new) | Create a new project |
+| [`winn compile [file]`](#winn-compile) | Compile `.winn` files to `.beam` |
+| [`winn run <file>`](#winn-run) | Compile and run a single file |
+| [`winn start [module]`](#winn-start) | Start project (keeps VM alive) |
+| [`winn test [file]`](#winn-test) | Run tests |
+| [`winn watch [--start]`](#winn-watch) | Hot-reload with live dashboard |
+| [`winn create <type>`](#winn-create) | Generate code (model, migration, task, router, scaffold) |
+| [`winn c <type>`](#winn-create) | Shorthand for create |
+| [`winn migrate`](#winn-migrate) | Run database migrations |
+| [`winn rollback`](#winn-rollback) | Rollback migrations |
+| [`winn task <name>`](#winn-task) | Run a project task |
+| [`winn add <package>`](#winn-add) | Install a package |
+| [`winn remove <package>`](#winn-remove) | Remove a package |
+| [`winn packages`](#winn-packages) | List installed packages |
+| [`winn install`](#winn-install) | Install all from package.json |
+| [`winn docs [file]`](#winn-docs) | Generate API docs with Mermaid graph |
+| [`winn bench <file>`](#winn-bench) | Run load tests |
+| [`winn metrics`](#winn-metrics) | Live metrics dashboard |
+| [`winn release`](#winn-release) | Build production release |
+| [`winn deps`](#winn-deps) | Manage Erlang dependencies |
+| [`winn console`](#winn-console) | Interactive REPL |
+| [`winn version`](#winn-version) | Print version |
 
 ---
 
-## Commands
+## Command Details
 
+<a id="winn-new"></a>
 ### `winn new <name>`
 
-Create a new Winn project with the standard directory structure.
+Create a new project with `src/`, `rebar.config`, `package.json`, and `.gitignore`.
 
 ```sh
 winn new my_app
 ```
 
-Creates:
-
-```
-my_app/
-├── rebar.config       # Erlang build configuration
-├── .gitignore         # Ignores _build/, ebin/, *.beam
-└── src/
-    └── my_app.winn    # Starter module with main()
-```
-
-The generated `src/my_app.winn` (note: project names are auto-converted to PascalCase module names):
-
-```winn
-module MyApp
-  def main()
-    IO.puts("Hello from my_app!")
-  end
-end
-```
-
----
-
+<a id="winn-compile"></a>
 ### `winn compile [file]`
 
-Compile `.winn` files to `.beam` bytecode.
+Compile `.winn` files to `.beam` bytecode in `ebin/`.
 
 ```sh
-# Compile a single file — output to ebin/
-winn compile src/my_app.winn
-
-# Compile all .winn files in src/ (falls back to current dir)
-winn compile
-# => Compiled 3 file(s) to ebin/
+winn compile                   # all files in src/
+winn compile src/my_app.winn   # single file
 ```
 
-Output `.beam` files are written to `ebin/`. The directory is created automatically.
-
-**Compilation pipeline:**
-
-1. Lexer tokenizes the source (`.winn` → tokens)
-2. Parser builds the AST (tokens → syntax tree)
-3. Semantic analysis checks scope and variables
-4. Transform desugars pipes, match blocks, closures, interpolation, schemas
-5. Codegen produces Core Erlang via the `cerl` module
-6. Core Erlang is compiled to `.beam` bytecode
-
-**Error output:**
-
-If compilation fails, you get a clear error message pointing to the issue:
-
-```
--- Syntax Error ----------------------------- src/app.winn --
-
-3 |     x +
-4 |   end
-  |   ^^^
-5 | end
-  Unexpected 'end'.
-  Hint: Did you close a block too early, or forget an expression?
-```
-
-Errors are printed to stderr. Exit code is 1 on failure, 0 on success.
-
----
-
+<a id="winn-run"></a>
 ### `winn run <file>`
 
-Compile a single `.winn` file and immediately run it.
+Compile and run a single file. Calls `main()` and exits.
 
 ```sh
 winn run src/hello.winn
 ```
 
-How it works:
-
-1. Compiles the file to a temporary directory
-2. Reads the module name from the source (`module HelloWorld` → `helloworld`)
-3. Loads the `.beam` into the Erlang VM
-4. Calls `Module:main()` (falls back to `main/1` with `[]`)
-5. Cleans up the temp directory
-
-Best for quick scripts and single-file programs.
-
----
-
+<a id="winn-start"></a>
 ### `winn start [module]`
 
-Compile a full project and start it with the VM kept alive.
+Compile all files, start OTP apps, call `main()`, keep the VM alive. Use for servers and long-running services.
 
 ```sh
-# Auto-detect main module from first .winn file
-winn start
-
-# Specify a module explicitly
-winn start my_app
+winn start              # auto-detect main module
+winn start my_app       # specify module
 ```
 
-How it works:
-
-1. Compiles all `.winn` files in `src/` (or current directory)
-2. Adds `ebin/` and `_build/` dependency paths to the code path
-3. Starts OTP applications (crypto, ssl, cowboy, hackney, gun)
-4. Calls `Module:main()` on the detected or specified module
-5. **Keeps the VM running** after `main()` returns
-
-Use `winn start` for:
-- HTTP servers (the VM must stay alive to serve requests)
-- GenServer / Supervisor applications
-- Any long-running service
-
----
-
+<a id="winn-test"></a>
 ### `winn test [file]`
 
-Run Winn tests.
+Run tests written with `use Winn.Test`. Discovers `test_*` functions automatically.
 
 ```sh
-# Run all tests in test/
-winn test
-
-# Run a specific test file
-winn test test/math_test.winn
+winn test                       # all tests in test/
+winn test test/math_test.winn   # specific file
 ```
-
-Write tests using `use Winn.Test`:
 
 ```winn
 module MathTest
@@ -166,176 +93,81 @@ module MathTest
     assert(1 + 1 == 2)
   end
 
-  def test_string_equality()
-    result = "hello" <> " world"
-    assert_equal("hello world", result)
+  def test_equality()
+    assert_equal("hello", "hello")
   end
 end
 ```
 
-**Assertions:**
-
-| Function | Description |
-|----------|-------------|
-| `assert(expr)` | Passes if `expr` is `true` |
-| `assert_equal(expected, actual)` | Passes if `expected =:= actual` |
-
-**How it works:**
-
-1. Compiles all `test/*.winn` files (and `src/*.winn` for project modules)
-2. Loads compiled beams into the VM
-3. Discovers functions named `test_*` in test modules
-4. Runs each test function, catches assertion failures
-5. Prints colorized pass/fail results with timing
-
-Exit code is 0 when all tests pass, 1 on any failure.
-
----
-
-### `winn docs [file]`
-
-Generate API documentation with a module dependency graph.
-
-```sh
-# Generate docs for all src/*.winn files
-winn docs
-
-# Generate docs for a specific file
-winn docs src/api.winn
-```
-
-Output is written to `doc/api/`:
-
-```
-doc/api/
-├── index.md         # Module list + Mermaid dependency graph
-├── api.md           # Per-module API docs
-├── auth.md
-└── user.md
-```
-
-**Features:**
-
-- Extracts `#` doc comments before `def` and `module` declarations
-- Generates per-module Markdown files with function signatures
-- Builds a **Mermaid dependency graph** showing which modules call which (renders on GitHub)
-- Handles multi-clause functions
-- Skips stdlib modules (IO, Enum, String, etc.) in the graph
-
----
-
+<a id="winn-watch"></a>
 ### `winn watch`
 
-Watch source files and hot-reload modules on change with a live terminal dashboard.
+Watch files for changes, hot-reload via BEAM code swap, show a live terminal dashboard.
 
 ```sh
-# Watch and recompile only
-winn watch
-
-# Watch + start the app (like winn start but with auto-reload)
-winn watch --start
+winn watch              # watch and recompile
+winn watch --start      # watch + start the app
 ```
 
-The dashboard shows:
+<a id="winn-create"></a>
+### `winn create <type>` / `winn c`
 
-```
-┌─ Winn Watch ─────────────────────────────────┐
-│ Watching src/ (3 modules)                     │
-│                                               │
-│  ✓ Api          reloaded 2s ago               │
-│  ✓ Auth         reloaded 14s ago              │
-│  ✗ User         compile error                 │
-│    └ line 12: undefined var `nam`             │
-│                                               │
-│ Reloads: 7  Errors: 1  Uptime: 2m 30s        │
-└───────────────────────────────────────────────┘
+Generate code from templates. `winn c` is shorthand.
+
+```sh
+winn create model User name:string email:string
+winn create migration CreateUsers name:string
+winn create task db:seed
+winn create router Api
+winn create scaffold Post title:string body:text
 ```
 
-**Features:**
-- Polls `src/*.winn` every 500ms for changes
-- Hot-reloads changed modules via BEAM code swap (no restart needed)
-- Compile errors keep the last working version loaded
-- Live dashboard with per-module status, reload times, and error details
-- `--start` flag starts OTP apps and calls `main()` before watching
+Scaffold generates model + CRUD router + test file.
 
----
-
+<a id="winn-migrate"></a>
 ### `winn migrate`
 
-Run database migrations.
+Run pending database migrations from `migrations/*.winn`.
 
 ```sh
-winn migrate              # Run all pending migrations
-winn migrate --step 2     # Run next 2 migrations
-winn migrate --status     # Show migration status
-winn rollback             # Rollback last migration
-winn rollback --step 3    # Rollback last 3 migrations
+winn migrate              # run all pending
+winn migrate --step 2     # run next 2
+winn migrate --status     # show applied vs pending
 ```
 
-Migrations live in `migrations/*.winn` with `up()` and `down()` functions:
+<a id="winn-rollback"></a>
+### `winn rollback`
 
-```winn
-module Migrations.CreateUsers
-  def up()
-    Repo.execute("CREATE TABLE users (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      email VARCHAR(255)
-    )")
-  end
-
-  def down()
-    Repo.execute("DROP TABLE users")
-  end
-end
-```
-
-Applied migrations are tracked in a `schema_migrations` table (auto-created). Files are sorted by name, so use numeric prefixes: `001_create_users.winn`, `002_add_email.winn`.
-
----
-
-### `winn task <name> [args...]`
-
-Run project tasks. Tasks are Winn modules with `use Winn.Task` and a `run/1` function.
+Rollback database migrations.
 
 ```sh
+winn rollback             # rollback last
+winn rollback --step 3    # rollback last 3
+```
+
+<a id="winn-task"></a>
+### `winn task <name>`
+
+Run project tasks. Rails-style colon syntax.
+
+```sh
+winn task db:seed
 winn task db:migrate
-winn task db:seed --file data.csv
-winn task routes
 ```
 
-Task names use colons for namespacing (like Rails) — `db:migrate` maps to `module Tasks.Db.Migrate`:
+Tasks are modules with `use Winn.Task` and a `run/1` function in `tasks/` or `src/`.
 
-```winn
-module Tasks.Db.Migrate
-  use Winn.Task
-
-  def run(args)
-    IO.puts("Running migrations...")
-  end
-end
-```
-
-Tasks are discovered from `tasks/*.winn` and `src/*.winn`. The task runner compiles all source files, finds the matching module, and calls `run/1` with any extra CLI arguments.
-
----
-
+<a id="winn-add"></a>
 ### `winn add <package>`
 
-Install a Winn package from GitHub.
+Install a Winn package.
 
 ```sh
-winn add redis                        # install from gregwinn/winn-redis
-winn add github:user/winn-stripe      # install from any GitHub repo
+winn add redis                        # from gregwinn/winn-redis
+winn add github:user/winn-stripe      # from any GitHub repo
 ```
 
-Packages are repos with a `package.json` manifest and Winn source. Installing a package:
-- Clones the repo to `_packages/`
-- Copies Winn source files to `src/`
-- Adds Erlang dependencies to `rebar.config`
-- Registers the module mapping in `.winn_packages.json`
-- Adds to your project's `package.json`
-
+<a id="winn-remove"></a>
 ### `winn remove <package>`
 
 Remove an installed package.
@@ -344,28 +176,17 @@ Remove an installed package.
 winn remove redis
 ```
 
+<a id="winn-packages"></a>
 ### `winn packages`
 
-List installed packages.
+List installed packages with version and module name.
 
-```sh
-winn packages
-
-  Package       Version   Module
-  ────────────────────────────────
-  redis         0.1.0     Redis
-  mongodb       0.1.0     Mongo
-```
-
+<a id="winn-install"></a>
 ### `winn install`
 
-Install all packages listed in `package.json`.
+Install all packages from `package.json`.
 
-```sh
-winn install
-```
-
-### Available Packages
+**Available packages:**
 
 | Package | Install | Description |
 |---------|---------|-------------|
@@ -373,96 +194,64 @@ winn install
 | [winn-mongodb](https://github.com/gregwinn/winn-mongodb) | `winn add mongodb` | MongoDB client |
 | [winn-amqp](https://github.com/gregwinn/winn-amqp) | `winn add amqp` | RabbitMQ/AMQP client |
 
----
+<a id="winn-docs"></a>
+### `winn docs [file]`
 
-### `winn deps`
-
-Manage project dependencies.
+Generate Markdown API docs with a Mermaid module dependency graph.
 
 ```sh
-# List current dependencies
+winn docs                 # all src/*.winn → doc/api/
+winn docs src/api.winn    # single file
+```
+
+<a id="winn-bench"></a>
+### `winn bench <file>`
+
+Run load tests with concurrent BEAM workers. Reports P50/P95/P99 latency.
+
+```sh
+winn bench bench/api_bench.winn
+```
+
+<a id="winn-metrics"></a>
+### `winn metrics`
+
+Live terminal dashboard showing HTTP stats, BEAM health, and custom metrics.
+
+<a id="winn-release"></a>
+### `winn release`
+
+Build a production OTP release.
+
+```sh
+winn release              # build release
+winn release --docker     # generate Dockerfile
+```
+
+<a id="winn-deps"></a>
+### `winn deps`
+
+Manage Erlang dependencies (lower-level than `winn add`).
+
+```sh
 winn deps list
-
-# Add a dependency (fetches and compiles automatically)
 winn deps add cowboy 2.12.0
-
-# Remove a dependency
 winn deps remove cowboy
-
-# Fetch and compile all dependencies
 winn deps install
 ```
 
-Dependencies are stored in `rebar.config` in standard Erlang format. Under the hood, `winn deps install` runs `rebar3 get-deps && rebar3 compile`.
+<a id="winn-console"></a>
+### `winn console`
 
----
+Interactive REPL with variable persistence.
 
+<a id="winn-version"></a>
 ### `winn version`
 
-Print the version.
-
 ```sh
-winn version
-# => winn 0.7.0
-
-# Also works with flags:
+winn version    # => winn 0.7.0
 winn -v
 winn --version
-```
-
----
-
-### `winn help`
-
-Print usage information.
-
-```sh
-winn help
-```
-
----
-
-## Typical Workflows
-
-### Quick script
-
-```sh
-winn run hello.winn
-```
-
-### Web service
-
-```sh
-winn new my_api
-cd my_api
-# Edit src/*.winn files
-winn start
-# Server is running, hit it with curl
-```
-
-### Multi-file project
-
-```sh
-winn compile              # Compile all src/*.winn to ebin/
-winn start                # Start with deps loaded
-```
-
----
-
-## Programmatic API
-
-Drive the Winn compiler from Erlang code or the rebar3 shell:
-
-```erlang
-%% Compile a file to a directory
-winn:compile_file("src/hello.winn", "ebin").
-
-%% Compile a string (useful for testing)
-winn:compile_string(
-  "module Test\n  def main()\n    IO.puts(\"hi\")\n  end\nend",
-  "test.winn",
-  "ebin"
-).
 ```
 
 ---
