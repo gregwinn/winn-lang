@@ -65,6 +65,13 @@ build_chain_from_list(RouterModule, [cors | Rest], Handler) ->
         false -> #{}
     end,
     fun(Conn) -> winn_cors:middleware(Conn, Inner, CorsConfig) end;
+build_chain_from_list(RouterModule, [auth | Rest], Handler) ->
+    Inner = build_chain_from_list(RouterModule, Rest, Handler),
+    AuthConfig = case erlang:function_exported(RouterModule, auth_config, 0) of
+        true  -> RouterModule:auth_config();
+        false -> #{}
+    end,
+    fun(Conn) -> winn_auth:middleware(Conn, Inner, AuthConfig) end;
 build_chain_from_list(RouterModule, [MwName | Rest], Handler) ->
     Inner = build_chain_from_list(RouterModule, Rest, Handler),
     fun(Conn) -> RouterModule:MwName(Conn, Inner) end.

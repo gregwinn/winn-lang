@@ -325,6 +325,7 @@ resolve_dot_call('Timer', Fun)    -> {winn_timer, Fun};
 resolve_dot_call('File', Fun)     -> {winn_file, Fun};
 resolve_dot_call('Regex', Fun) -> {winn_regex, Fun};
 resolve_dot_call('Protocol', Fun) -> {winn_protocol, Fun};
+resolve_dot_call('Health', Fun)   -> {winn_health, Fun};
 resolve_dot_call('Metrics', Fun)  -> {winn_metrics, Fun};
 resolve_dot_call('ReplBindings', get) -> {winn_repl, get_binding};
 resolve_dot_call(Mod, Fun) ->
