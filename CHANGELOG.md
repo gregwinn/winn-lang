@@ -10,7 +10,10 @@ All notable changes to the Winn language are documented here.
 - **Rails-style model methods** — schema modules auto-generate `all()`, `find(id)`, `find_by(field, value)`, `create(attrs)`, `delete(record)`, `count()`
 
 ### Tooling
-- **`winn task <name>`** — run project tasks from the CLI with Rails-style colon syntax (e.g., `winn task db:migrate`)
+- **`winn migrate`** — run pending database migrations with `schema_migrations` tracking
+- **`winn rollback`** — rollback migrations with `--step N` support
+- **`winn migrate --status`** — show applied vs pending migrations
+- **`winn task <name>`** — run project tasks from the CLI with Rails-style colon syntax (e.g., `winn task db:seed`)
 
 ## [0.4.0] - 2026-03-29
 

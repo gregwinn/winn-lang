@@ -260,6 +260,40 @@ The dashboard shows:
 
 ---
 
+### `winn migrate`
+
+Run database migrations.
+
+```sh
+winn migrate              # Run all pending migrations
+winn migrate --step 2     # Run next 2 migrations
+winn migrate --status     # Show migration status
+winn rollback             # Rollback last migration
+winn rollback --step 3    # Rollback last 3 migrations
+```
+
+Migrations live in `migrations/*.winn` with `up()` and `down()` functions:
+
+```winn
+module Migrations.CreateUsers
+  def up()
+    Repo.execute("CREATE TABLE users (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(255)
+    )")
+  end
+
+  def down()
+    Repo.execute("DROP TABLE users")
+  end
+end
+```
+
+Applied migrations are tracked in a `schema_migrations` table (auto-created). Files are sorted by name, so use numeric prefixes: `001_create_users.winn`, `002_add_email.winn`.
+
+---
+
 ### `winn task <name> [args...]`
 
 Run project tasks. Tasks are Winn modules with `use Winn.Task` and a `run/1` function.
