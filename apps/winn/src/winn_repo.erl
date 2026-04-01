@@ -3,6 +3,7 @@
     configure/1, start_pool/0, pool_status/0,
     insert/2, get/2, get/3, all/1, all/2,
     delete/1, update/1, execute/1, execute/2,
+    transaction/1,
     'query.new'/1, 'query.where'/3, 'query.limit'/2,
     sql_for_insert/2, sql_for_select/2
 ]).
@@ -206,6 +207,34 @@ execute(SQL, Params) when is_binary(SQL), is_list(Params) ->
             {ok, _Cols, Rows}  -> {ok, Rows};
             {ok, Count}        -> {ok, Count};
             {error, Reason}    -> {error, Reason}
+        end
+    end).
+
+%% Transaction: wraps a function in BEGIN/COMMIT/ROLLBACK.
+%% Returns {:ok, Result} on success, {:error, Reason} on failure (rolled back).
+%%
+%% Usage from Winn:
+%%   Repo.transaction(fn() =>
+%%     Repo.insert(User, %{name: "Alice"})
+%%     Repo.insert(Profile, %{user_id: 1})
+%%   end)
+transaction(Fun) when is_function(Fun, 0) ->
+    with_conn(fun(Conn) ->
+        case epgsql:squery(Conn, "BEGIN") of
+            {ok, [], []} ->
+                try
+                    Result = Fun(),
+                    case epgsql:squery(Conn, "COMMIT") of
+                        {ok, [], []} -> {ok, Result};
+                        {error, CommitErr} -> {error, {commit_failed, CommitErr}}
+                    end
+                catch
+                    Class:Reason:Stack ->
+                        epgsql:squery(Conn, "ROLLBACK"),
+                        {error, {rolled_back, Class, Reason, Stack}}
+                end;
+            {error, BeginErr} ->
+                {error, {transaction_begin_failed, BeginErr}}
         end
     end).
 
