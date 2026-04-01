@@ -321,6 +321,7 @@ resolve_dot_call('Server', Fun)  -> {winn_server, Fun};
 resolve_dot_call('JSON', Fun)    -> {winn_json, Fun};
 resolve_dot_call('Winn', Fun)    -> {winn_runtime, Fun};
 resolve_dot_call('Protocol', Fun) -> {winn_protocol, Fun};
+resolve_dot_call('Metrics', Fun)  -> {winn_metrics, Fun};
 resolve_dot_call('ReplBindings', get) -> {winn_repl, get_binding};
 resolve_dot_call(Mod, Fun) ->
     ErlMod = list_to_atom(string:lowercase(atom_to_list(Mod))),
