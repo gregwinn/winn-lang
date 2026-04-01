@@ -2,6 +2,26 @@
 
 All notable changes to the Winn language are documented here.
 
+## [0.7.0] - 2026-04-01
+
+### Core Stdlib
+- **File I/O** — `File.read`, `File.write`, `File.exists?`, `File.delete`, `File.list`, `File.read_lines`, `File.append`, `File.mkdir`
+- **Regex** — `Regex.match?`, `Regex.replace`, `Regex.scan`, `Regex.split`, `Regex.named_captures`
+- **Timer** — `Timer.every`, `Timer.after`, `Timer.cancel` for periodic tasks
+- **Retry** — `Retry.run` with exponential backoff and jitter
+- **System.get_env default** — `System.get_env("KEY", "fallback")` with 2-arity
+- **DateTime** — `DateTime.add`, `DateTime.before?`, `DateTime.after?`
+- **String** — `String.pad_left`, `String.pad_right`, `String.repeat`, `String.byte_size`, safe `String.slice`
+
+### Package System
+- **`winn add <package>`** — install packages from GitHub repos
+- **`winn remove <package>`** — uninstall packages
+- **`winn packages`** — list installed packages
+- **`winn install`** — install all from `package.json`
+- **`package.json`** — project manifest for declaring package dependencies
+- Packages are written in Winn (no Erlang required) with a `package.json` manifest
+- `winn new` scaffold now generates `package.json`
+
 ## [0.6.0] - 2026-04-01
 
 ### Observability

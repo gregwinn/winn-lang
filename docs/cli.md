@@ -348,7 +348,7 @@ Print the version.
 
 ```sh
 winn version
-# => winn 0.6.0
+# => winn 0.7.0
 
 # Also works with flags:
 winn -v
