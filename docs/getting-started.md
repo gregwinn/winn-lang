@@ -28,7 +28,7 @@ Requires Erlang/OTP 28+ and rebar3.
 
 ```sh
 winn version
-# => winn 0.5.0
+# => winn 0.6.0
 
 winn help
 ```
@@ -36,7 +36,7 @@ winn help
 You should see:
 
 ```
-Winn 0.5.0 - a compiled language on the BEAM
+Winn 0.6.0 - a compiled language on the BEAM
 
 Usage:
   winn new <name>         Create a new Winn project
@@ -544,6 +544,31 @@ Build production releases:
 ```sh
 winn release              # Build a production release
 winn release --docker     # Generate a Dockerfile
+```
+
+---
+
+## 20. Metrics and Load Testing
+
+Monitor your app with built-in metrics:
+
+```winn
+Metrics.enable()
+Metrics.increment(:api_calls)
+Metrics.set(:active_users, 42)
+Metrics.observe(:latency, 12.5)
+```
+
+View a live dashboard:
+
+```sh
+winn metrics
+```
+
+Run load tests:
+
+```sh
+winn bench bench/api_bench.winn
 ```
 
 ---

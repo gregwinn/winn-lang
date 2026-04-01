@@ -2,7 +2,7 @@
 
 All notable changes to the Winn language are documented here.
 
-## [Unreleased]
+## [0.6.0] - 2026-04-01
 
 ### Observability
 - **Metrics module** — `Metrics.increment`, `Metrics.set`, `Metrics.observe`, `Metrics.time` for counters, gauges, histograms

@@ -1,8 +1,8 @@
 # Winn Roadmap
 
-## Current Status — v0.5.0
+## Current Status — v0.6.0
 
-475 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
+502 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
 
 ### Completed
 
@@ -39,6 +39,9 @@
 | Tooling | Code generators (`winn create` / `winn c`) | v0.5.0 |
 | Tooling | CLI task runner (`winn task db:seed`) | v0.5.0 |
 | Tooling | Deployment (`winn release` / `winn release --docker`) | v0.5.0 |
+| Observability | Metrics module (counters, gauges, histograms, HTTP metrics) | v0.6.0 |
+| Observability | Live metrics dashboard (`winn metrics`) | v0.6.0 |
+| Observability | Built-in load testing (`winn bench`) | v0.6.0 |
 
 ---
 
