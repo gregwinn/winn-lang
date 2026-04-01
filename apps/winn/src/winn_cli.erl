@@ -55,6 +55,9 @@ main(Args) ->
         {task, TaskArgs} ->
             run_task(TaskArgs);
 
+        {metrics, MetricsArgs} ->
+            winn_metrics_dashboard:start(#{args => MetricsArgs});
+
         {release, ReleaseArgs} ->
             run_release(ReleaseArgs);
 
@@ -100,6 +103,7 @@ parse_args(["watch" | Args])       -> {watch, Args};
 parse_args(["task" | Args])        -> {task, Args};
 parse_args(["create" | Args])      -> {create, Args};
 parse_args(["c" | Args])           -> {create, Args};
+parse_args(["metrics" | Args])     -> {metrics, Args};
 parse_args(["release" | Args])     -> {release, Args};
 parse_args(["migrate" | Args])     -> {migrate, Args};
 parse_args(["rollback" | Args])    -> {rollback, Args};
@@ -710,6 +714,7 @@ print_usage() ->
         "  winn watch              Watch files and hot-reload with live dashboard~n"
         "  winn watch --start      Watch + start the app~n"
         "  winn task <name>        Run a project task (e.g., winn task db:seed)~n"
+        "  winn metrics            Live metrics dashboard~n"
         "  winn release            Build a production release~n"
         "  winn release --docker   Generate a Dockerfile~n"
         "  winn create <type>      Generate code (model, migration, task, router, scaffold)~n"
