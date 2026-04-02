@@ -69,6 +69,57 @@ transform_form({module, Line, Name, Body}) ->
     end,
 
     {module, Line, Name, BehaviourAttrs ++ SyntheticFns ++ Final};
+%% ── Agent desugaring ─────────────────────────────────────────────────────
+%% An `agent` block is desugared into a module with GenServer infrastructure.
+%% The result is fed back into transform_form({module,...}) for normal processing.
+
+transform_form({agent, Line, Name, Items}) ->
+    %% 1. Partition items into state declarations and functions
+    {StateDefs, AgentFns} = lists:partition(
+        fun({state_decl,_,_,_}) -> true; (_) -> false end, Items),
+
+    %% 2. Build default state map
+    DefaultState = {map, Line, [{VName, Expr} || {state_decl, _, VName, Expr} <- StateDefs]},
+
+    ModAtom = lower_module_atom(Name),
+
+    %% 3. Generate behaviour attribute
+    BehavAttr = {behaviour_attr, Line, gen_server},
+
+    %% 4. Generate start/0 and start/1
+    StartFn0 = gen_agent_start(Line, ModAtom, DefaultState),
+    StartFn1 = gen_agent_start_with_overrides(Line, ModAtom, DefaultState),
+
+    %% 5. Generate init/1
+    InitFn = {function, Line, init, [{var, Line, '__init_state__'}],
+              [{tuple, Line, [{atom, Line, ok}, {var, Line, '__init_state__'}]}]},
+
+    %% 6. For each agent function, generate client fn + handle clause
+    FnPairs = [gen_agent_fn_pair(F, ModAtom) || F <- AgentFns],
+    ClientFns = [C || {C, _} <- FnPairs],
+    HandleFns = [H || {_, H} <- FnPairs],
+
+    %% Group handle_call and handle_cast separately so merge_fn_clauses works
+    HandleCalls = [H || {function, _, handle_call, _, _} = H <- HandleFns]
+              ++ [H || {function_g, _, handle_call, _, _, _} = H <- HandleFns],
+    HandleCasts = [H || {function, _, handle_cast, _, _} = H <- HandleFns],
+
+    %% 7. Generate default handle_cast, handle_info, terminate
+    DefaultCast = {function, Line, handle_cast, [{var, Line, '__msg__'}, {var, Line, '__agent_state__'}],
+                   [{tuple, Line, [{atom, Line, noreply}, {var, Line, '__agent_state__'}]}]},
+    DefaultInfo = {function, Line, handle_info, [{var, Line, '__msg__'}, {var, Line, '__agent_state__'}],
+                   [{tuple, Line, [{atom, Line, noreply}, {var, Line, '__agent_state__'}]}]},
+    DefaultTerm = {function, Line, terminate, [{var, Line, '__reason__'}, {var, Line, '__agent_state__'}],
+                   [{atom, Line, ok}]},
+
+    %% 8. Assemble as a module — group same-name functions adjacently for merge
+    ModuleBody = [BehavAttr, StartFn0, StartFn1 | ClientFns]
+              ++ [InitFn]
+              ++ HandleCalls
+              ++ HandleCasts ++ [DefaultCast]
+              ++ [DefaultInfo, DefaultTerm],
+    transform_form({module, Line, Name, ModuleBody});
+
 transform_form(Other) ->
     Other.
 
@@ -115,6 +166,210 @@ expand_use(Line, 'Winn', 'Test', _ModName) ->
     {behaviour_only, Attr};
 expand_use(_Line, 'Winn', 'Schema', _ModName) ->
     {schema_use, none}.
+
+%% ── Agent helper functions ──────────────────────────────────────────────
+
+%% start/0: start with default state, unwrap {:ok, pid} to just pid
+gen_agent_start(L, ModAtom, DefaultState) ->
+    {function, L, start, [],
+     [{pat_assign, L,
+         {tuple, L, [{atom, L, ok}, {var, L, '__agent_pid__'}]},
+         {dot_call, L, 'GenServer', start, [
+             {atom, L, ModAtom},
+             DefaultState,
+             {list, L, []}
+         ]}},
+      {var, L, '__agent_pid__'}]}.
+
+%% start/1: merge overrides into defaults, then start
+gen_agent_start_with_overrides(L, ModAtom, DefaultState) ->
+    {function, L, start, [{var, L, '__overrides__'}],
+     [{assign, L, {var, L, '__merged__'},
+         {dot_call, L, 'Map', merge, [DefaultState, {var, L, '__overrides__'}]}},
+      {pat_assign, L,
+         {tuple, L, [{atom, L, ok}, {var, L, '__agent_pid__'}]},
+         {dot_call, L, 'GenServer', start, [
+             {atom, L, ModAtom},
+             {var, L, '__merged__'},
+             {list, L, []}
+         ]}},
+      {var, L, '__agent_pid__'}]}.
+
+%% Generate client function + handle clause for an agent function
+gen_agent_fn_pair({agent_fn, L, FnName, Params, Body}, _ModAtom) ->
+    gen_sync_pair(L, FnName, Params, Body);
+gen_agent_fn_pair({agent_fn_g, L, FnName, Params, Guard, Body}, _ModAtom) ->
+    gen_sync_pair_guarded(L, FnName, Params, Guard, Body);
+gen_agent_fn_pair({agent_cast_fn, L, FnName, Params, Body}, _ModAtom) ->
+    gen_cast_pair(L, FnName, Params, Body).
+
+%% Sync (gen_server:call) — client + handle_call
+gen_sync_pair(L, FnName, Params, Body) ->
+    ClientFn = gen_client_fn(L, FnName, Params, call),
+    HandleFn = gen_handle_call(L, FnName, Params, none, Body),
+    {ClientFn, HandleFn}.
+
+gen_sync_pair_guarded(L, FnName, Params, Guard, Body) ->
+    ClientFn = gen_client_fn(L, FnName, Params, call),
+    HandleFn = gen_handle_call(L, FnName, Params, Guard, Body),
+    {ClientFn, HandleFn}.
+
+%% Async (gen_server:cast) — client + handle_cast
+gen_cast_pair(L, FnName, Params, Body) ->
+    ClientFn = gen_client_fn(L, FnName, Params, cast),
+    HandleFn = gen_handle_cast(L, FnName, Params, Body),
+    {ClientFn, HandleFn}.
+
+%% Client function: Mod.fn(pid, args...) -> gen_server:call/cast(pid, msg)
+gen_client_fn(L, FnName, Params, CallOrCast) ->
+    PidVar = {var, L, '__agent_pid__'},
+    ClientParams = [PidVar | Params],
+    Msg = agent_message(L, FnName, Params),
+    GsFn = case CallOrCast of call -> call; cast -> cast end,
+    {function, L, FnName, ClientParams,
+     [{dot_call, L, 'GenServer', GsFn, [PidVar, Msg]}]}.
+
+%% Build the message tuple/atom for gen_server call/cast
+agent_message(L, FnName, []) ->
+    {atom, L, FnName};
+agent_message(L, FnName, Params) ->
+    {tuple, L, [{atom, L, FnName} | Params]}.
+
+%% Build the pattern for matching the message in handle_call/handle_cast
+agent_message_pattern(L, FnName, []) ->
+    {pat_atom, L, FnName};
+agent_message_pattern(L, FnName, Params) ->
+    {pat_tuple, L, [{pat_atom, L, FnName} | params_to_patterns(Params)]}.
+
+params_to_patterns(Params) ->
+    [case P of
+         {var, PL, N} -> {var, PL, N};
+         {pat_wildcard, _} = W -> W;
+         {pat_var, _, _} = PV -> PV;
+         Other -> Other
+     end || P <- Params].
+
+%% Generate handle_call clause
+gen_handle_call(L, FnName, Params, Guard, Body) ->
+    MsgPat = agent_message_pattern(L, FnName, Params),
+    {RewrittenBody, _Counter} = rewrite_agent_body(Body, 0),
+    %% Extract last expression as reply value, wrap in {:reply, val, state}
+    WrappedBody = wrap_reply(L, RewrittenBody),
+    case Guard of
+        none ->
+            {function, L, handle_call,
+             [MsgPat, {var, L, '__from__'}, {var, L, '__agent_state__'}],
+             WrappedBody};
+        _ ->
+            {function_g, L, handle_call,
+             [MsgPat, {var, L, '__from__'}, {var, L, '__agent_state__'}],
+             Guard,
+             WrappedBody}
+    end.
+
+%% Generate handle_cast clause
+gen_handle_cast(L, FnName, Params, Body) ->
+    MsgPat = agent_message_pattern(L, FnName, Params),
+    {RewrittenBody, _Counter} = rewrite_agent_body(Body, 0),
+    %% Wrap in {:noreply, state}
+    WrappedBody = wrap_noreply(L, RewrittenBody),
+    {function, L, handle_cast,
+     [MsgPat, {var, L, '__agent_state__'}],
+     WrappedBody}.
+
+%% Wrap body: all exprs, then {:reply, last_value, __agent_state__}
+wrap_reply(L, []) ->
+    [{tuple, L, [{atom, L, reply}, {atom, L, nil}, {var, L, '__agent_state__'}]}];
+wrap_reply(L, Body) ->
+    {Init, Last} = split_last(Body),
+    Init ++ [
+        {assign, L, {var, L, '__agent_reply__'}, Last},
+        {tuple, L, [{atom, L, reply}, {var, L, '__agent_reply__'}, {var, L, '__agent_state__'}]}
+    ].
+
+%% Wrap body: all exprs, then {:noreply, __agent_state__}
+wrap_noreply(L, []) ->
+    [{tuple, L, [{atom, L, noreply}, {var, L, '__agent_state__'}]}];
+wrap_noreply(L, Body) ->
+    Body ++ [
+        {tuple, L, [{atom, L, noreply}, {var, L, '__agent_state__'}]}
+    ].
+
+split_last([X]) -> {[], X};
+split_last([H | T]) ->
+    {Rest, Last} = split_last(T),
+    {[H | Rest], Last}.
+
+%% ── Agent body rewriting ────────────────────────────────────────────────
+%% Rewrites @var reads and @var = expr writes in agent function bodies.
+
+rewrite_agent_body(Exprs, Counter) ->
+    {Rewritten, C1} = lists:mapfoldl(fun rewrite_agent_expr/2, Counter, Exprs),
+    {flatten_agent_body(Rewritten), C1}.
+
+rewrite_agent_expr({state_read, L, Name}, Counter) ->
+    {{field_access, L, {var, L, '__agent_state__'}, Name}, Counter};
+
+rewrite_agent_expr({state_write, L, Name, Expr}, Counter) ->
+    {RewrittenExpr, C1} = rewrite_agent_expr(Expr, Counter),
+    WVar = list_to_atom("__agent_w" ++ integer_to_list(C1) ++ "__"),
+    %% Expand to: __agent_wN__ = expr, __agent_state__ = Map.put(state, :name, wN), __agent_wN__
+    Nodes = [
+        {assign, L, {var, L, WVar}, RewrittenExpr},
+        {assign, L, {var, L, '__agent_state__'},
+            {dot_call, L, 'Map', put, [
+                {atom, L, Name},
+                {var, L, WVar},
+                {var, L, '__agent_state__'}
+            ]}},
+        {var, L, WVar}
+    ],
+    %% Return the sequence as a special multi-node marker
+    {{agent_write_seq, L, Nodes}, C1 + 1};
+
+%% Recurse into nested expressions
+rewrite_agent_expr({op, L, Op, Lhs, Rhs}, Counter) ->
+    {L2, C1} = rewrite_agent_expr(Lhs, Counter),
+    {R2, C2} = rewrite_agent_expr(Rhs, C1),
+    {{op, L, Op, L2, R2}, C2};
+rewrite_agent_expr({unary, L, Op, E}, Counter) ->
+    {E2, C1} = rewrite_agent_expr(E, Counter),
+    {{unary, L, Op, E2}, C1};
+rewrite_agent_expr({call, L, Fun, Args}, Counter) ->
+    {Args2, C1} = rewrite_agent_body(Args, Counter),
+    {{call, L, Fun, Args2}, C1};
+rewrite_agent_expr({dot_call, L, Mod, Fun, Args}, Counter) ->
+    {Args2, C1} = rewrite_agent_body(Args, Counter),
+    {{dot_call, L, Mod, Fun, Args2}, C1};
+rewrite_agent_expr({assign, L, Var, Expr}, Counter) ->
+    {E2, C1} = rewrite_agent_expr(Expr, Counter),
+    {{assign, L, Var, E2}, C1};
+rewrite_agent_expr({tuple, L, Elems}, Counter) ->
+    {E2, C1} = rewrite_agent_body(Elems, Counter),
+    {{tuple, L, E2}, C1};
+rewrite_agent_expr({list, L, Elems}, Counter) ->
+    {E2, C1} = rewrite_agent_body(Elems, Counter),
+    {{list, L, E2}, C1};
+rewrite_agent_expr({map, L, Pairs}, Counter) ->
+    {Vals, C1} = rewrite_agent_body([V || {_, V} <- Pairs], Counter),
+    Keys = [K || {K, _} <- Pairs],
+    {{map, L, lists:zip(Keys, Vals)}, C1};
+rewrite_agent_expr({if_expr, L, Cond, Then, Else}, Counter) ->
+    {Cond2, C1} = rewrite_agent_expr(Cond, Counter),
+    {Then2, C2} = rewrite_agent_body(Then, C1),
+    {Else2, C3} = rewrite_agent_body(Else, C2),
+    {{if_expr, L, Cond2, Then2, Else2}, C3};
+rewrite_agent_expr({block, L, Params, Body}, Counter) ->
+    {Body2, C1} = rewrite_agent_body(Body, Counter),
+    {{block, L, Params, Body2}, C1};
+rewrite_agent_expr(Other, Counter) ->
+    {Other, Counter}.
+
+%% Flatten agent_write_seq nodes into the body list
+flatten_agent_body(Exprs) ->
+    lists:flatmap(fun({agent_write_seq, _, Nodes}) -> Nodes;
+                     (Other) -> [Other]
+                  end, Exprs).
 
 %% ── Default parameter expansion ─────────────────────────────────────────
 %% Generates wrapper clauses for functions with default parameters.
@@ -321,6 +576,9 @@ expand_schema_def({schema_def, L, TableBin, Fields}, ModName) ->
      AllFn, FindFn, FindByFn, CreateFn, DeleteFn, CountFn].
 
 %% ── Function transformation ────────────────────────────────────────────────
+
+%% Pass through non-function nodes (e.g. behaviour_attr from agent desugaring)
+transform_function({behaviour_attr, _, _} = B) -> B;
 
 transform_function({function_g, Line, Name, Params, Guard, Body}) ->
     TransBody  = transform_seq(Body),
