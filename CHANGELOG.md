@@ -2,6 +2,20 @@
 
 All notable changes to the Winn language are documented here.
 
+## [0.8.0] - 2026-04-02
+
+### Language
+- **`agent` keyword** — first-class stateful actors as a language primitive, compiles to GenServer with zero boilerplate
+- **`@state` syntax** — `@count` reads and `@count = expr` writes agent state, desugared in the transform phase
+- **`async def`** — fire-and-forget agent functions via `gen_server:cast`
+- **Agent start with overrides** — `Counter.start()` uses defaults, `Counter.start(%{count: 100})` merges overrides
+
+### Web Framework
+- **Static file serving** — `{:static, "/public", "static/"}` route option for CSS/JS/images
+- **CORS middleware** — built-in CORS with configurable origins, methods, headers, preflight handling
+- **Auth middleware** — Bearer token extraction and JWT verification with path exclusions
+- **Health checks** — `Health.liveness`, `Health.readiness`, `Health.detailed` for Kubernetes probes
+
 ## [0.7.0] - 2026-04-01
 
 ### Core Stdlib
