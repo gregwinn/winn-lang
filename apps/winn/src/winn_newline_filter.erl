@@ -54,7 +54,7 @@ pass2([{rescue, _} = Tok | Rest], Ctx, Acc) ->
 %% Enter other keyword contexts (if, try, match, fn, for, def) that have 'end'
 pass2([{T, _} = Tok | Rest], Ctx, Acc)
   when T =:= 'if'; T =:= 'try'; T =:= 'match'; T =:= 'fn';
-       T =:= 'for'; T =:= 'def'; T =:= 'do' ->
+       T =:= 'for'; T =:= 'def'; T =:= 'do'; T =:= 'agent' ->
     pass2(Rest, [other | Ctx], [Tok | Acc]);
 
 %% Pop context on 'end'
