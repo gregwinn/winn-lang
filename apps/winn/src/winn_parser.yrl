@@ -16,6 +16,7 @@ Nonterminals
     program
     top_forms top_form
     module_def module_body dotted_name
+    agent_def agent_body agent_item agent_state_decl agent_function_def
     use_directive import_directive alias_directive
     function_def struct_def struct_fields protocol_def impl_def protocol_fns param_list pattern_list
     expr_seq
@@ -37,12 +38,12 @@ Nonterminals
 
 %% Phase 1 terminals + Phase 2 additions.
 Terminals
-    'module' 'def' 'struct' 'protocol' 'impl' 'do' 'end' 'use' 'import' 'alias' 'schema' 'field'
+    'module' 'agent' 'async' 'def' 'struct' 'protocol' 'impl' 'do' 'end' 'use' 'import' 'alias' 'schema' 'field'
     'match' 'ok_kw' 'err_kw' 'nil_kw'
     'if' 'else' 'switch' 'when' 'try' 'rescue'
     'fn' 'for' 'in'
     'and' 'or' 'not'
-    ident module_name
+    ident module_name state_ref
     atom_lit integer_lit float_lit string_lit interp_string boolean_lit
     '|>' '|>=' '=>' '..'
     '<>'
@@ -64,6 +65,34 @@ top_forms -> '$empty' : [].
 top_forms -> top_form top_forms : ['$1' | '$2'].
 
 top_form -> module_def : '$1'.
+top_form -> agent_def  : '$1'.
+
+%% ── Agent ────────────────────────────────────────────────────────────────────
+
+agent_def -> 'agent' dotted_name agent_body 'end'
+    : {agent, line('$1'), '$2', '$3'}.
+
+agent_body -> '$empty' : [].
+agent_body -> agent_item agent_body : ['$1' | '$2'].
+
+agent_item -> agent_state_decl : '$1'.
+agent_item -> agent_function_def : '$1'.
+
+%% state count = 0
+agent_state_decl -> ident ident '=' expr
+    : {state_decl, line('$1'), val('$2'), '$4'}.
+
+%% Sync function: def value() ... end
+agent_function_def -> 'def' ident '(' param_list ')' expr_seq 'end'
+    : {agent_fn, line('$1'), val('$2'), '$4', '$6'}.
+
+%% Sync function with guard: def withdraw(amount) when amount > 0 ... end
+agent_function_def -> 'def' ident '(' param_list ')' 'when' expr expr_seq 'end'
+    : {agent_fn_g, line('$1'), val('$2'), '$4', '$7', '$8'}.
+
+%% Async (cast) function: async def log(msg) ... end
+agent_function_def -> 'async' 'def' ident '(' param_list ')' expr_seq 'end'
+    : {agent_cast_fn, line('$1'), val('$3'), '$5', '$7'}.
 
 %% ── Module ─────────────────────────────────────────────────────────────────
 
@@ -204,6 +233,12 @@ primary_expr -> switch_expr                : '$1'.
 primary_expr -> try_expr                   : '$1'.
 primary_expr -> fn_expr                    : '$1'.
 primary_expr -> for_expr                   : '$1'.
+
+%% State access: @count (read), @count = expr (write)
+primary_expr -> state_ref
+    : {state_read, line('$1'), val('$1')}.
+primary_expr -> state_ref '=' expr
+    : {state_write, line('$1'), val('$1'), '$3'}.
 
 %% Assignment: x = expr (parsed at statement level via primary_expr)
 primary_expr -> ident '=' expr

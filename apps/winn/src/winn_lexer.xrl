@@ -37,6 +37,8 @@ Rules.
 
 %% Keywords — must appear before the identifier catch-all
 module                      : {token, {'module', TokenLine}}.
+agent                       : {token, {'agent', TokenLine}}.
+async                       : {token, {'async', TokenLine}}.
 def                         : {token, {'def', TokenLine}}.
 struct                      : {token, {'struct', TokenLine}}.
 protocol                    : {token, {'protocol', TokenLine}}.
@@ -79,6 +81,9 @@ order_by                    : {token, {'order_by', TokenLine}}.
 limit                       : {token, {'limit_kw', TokenLine}}.
 offset                      : {token, {'offset_kw', TokenLine}}.
 preload                     : {token, {'preload', TokenLine}}.
+
+%% State reference (@var) for agent state access
+@{A}{AN}*                   : {token, {state_ref, TokenLine, list_to_atom(tl(TokenChars))}}.
 
 %% Atom literals (:foo)
 :{A}{AN}*                   : {token, {atom_lit, TokenLine, list_to_atom(tl(TokenChars))}}.
