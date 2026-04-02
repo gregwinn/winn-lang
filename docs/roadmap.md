@@ -2,7 +2,7 @@
 
 ## Current Status — v0.7.0
 
-537 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
+562 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
 
 ### What's Shipped
 
@@ -20,7 +20,7 @@
 
 ## Coming Next
 
-### v0.8.0 — Web Framework
+### v0.8.0 — Web Framework + Agents
 
 | Issue | Feature | Description |
 |-------|---------|-------------|
@@ -30,6 +30,7 @@
 | [#50](https://github.com/gregwinn/winn-lang/issues/50) | File uploads | Multipart form data parsing |
 | [#51](https://github.com/gregwinn/winn-lang/issues/51) | Auth middleware | Bearer token and session auth |
 | [#65](https://github.com/gregwinn/winn-lang/issues/65) | Health checks | `/healthz` and `/ready` for Kubernetes |
+| [#102](https://github.com/gregwinn/winn-lang/issues/102) | **`agent` keyword** | First-class stateful actors — `agent Counter` with `@state` syntax, `async def` for cast, compiles to GenServer |
 
 ### v0.9.0 — Developer Tooling
 
@@ -39,6 +40,7 @@
 | [#53](https://github.com/gregwinn/winn-lang/issues/53) | Linter | `winn lint` for static analysis |
 | [#54](https://github.com/gregwinn/winn-lang/issues/54) | Scaffold | Improved `winn new` with test/, config/ |
 | [#55](https://github.com/gregwinn/winn-lang/issues/55) | LSP | Language server for IDE integration |
+| [#99](https://github.com/gregwinn/winn-lang/issues/99) | Codegen split | Split `winn_codegen.erl` into focused submodules |
 
 ### v0.10.0 — Hardening
 
@@ -47,6 +49,8 @@
 | [#56](https://github.com/gregwinn/winn-lang/issues/56) | Compiler errors | Better error handling for edge cases |
 | [#57](https://github.com/gregwinn/winn-lang/issues/57) | Validators | Extended changeset validators |
 | [#58](https://github.com/gregwinn/winn-lang/issues/58) | Bounds checking | Safe defaults for runtime functions |
+| [#98](https://github.com/gregwinn/winn-lang/issues/98) | Parser conflicts | Resolve shift/reduce conflicts before v1.0 |
+| [#100](https://github.com/gregwinn/winn-lang/issues/100) | Transform hardening | Pass ordering tests and invariant docs |
 
 ### v1.0.0 — The Winn Platform
 
@@ -55,6 +59,8 @@
 | [#32](https://github.com/gregwinn/winn-lang/issues/32) | AI Pipelines | `AI.chat()`, `AI.classify()`, `AI.extract()` as stdlib, Agent DSL, Smart Pipes |
 | [#33](https://github.com/gregwinn/winn-lang/issues/33) | Distributed Events | `Event.emit` / `on :event do` across BEAM nodes, zero infrastructure |
 | [#34](https://github.com/gregwinn/winn-lang/issues/34) | Background Jobs | `use Winn.Job` with queues, retries, cron, live dashboard |
+| [#103](https://github.com/gregwinn/winn-lang/issues/103) | **Reactive events** | Language-level `on`/`emit` pub/sub built on BEAM distribution |
+| [#104](https://github.com/gregwinn/winn-lang/issues/104) | **Pipelines** | `pipeline` keyword — supervised multi-stage data flows with backpressure |
 
 ### Ecosystem
 
@@ -62,3 +68,4 @@
 |-------|---------|-------------|
 | [#20](https://github.com/gregwinn/winn-lang/issues/20) | Example projects | Todo API, chat server, GitHub sync worker |
 | [#21](https://github.com/gregwinn/winn-lang/issues/21) | Package registry | `winn publish`, dependency resolution |
+| [#101](https://github.com/gregwinn/winn-lang/issues/101) | Package registry v2 | Dependency resolution, lockfile, `winn search` |
