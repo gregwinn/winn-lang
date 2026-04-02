@@ -61,6 +61,7 @@
 | [#34](https://github.com/gregwinn/winn-lang/issues/34) | Background Jobs | `use Winn.Job` with queues, retries, cron, live dashboard |
 | [#103](https://github.com/gregwinn/winn-lang/issues/103) | **Reactive events** | Language-level `on`/`emit` pub/sub built on BEAM distribution |
 | [#104](https://github.com/gregwinn/winn-lang/issues/104) | **Pipelines** | `pipeline` keyword — supervised multi-stage data flows with backpressure |
+| [#108](https://github.com/gregwinn/winn-lang/issues/108) | **Distributed clustering** | `Winn.connect(:node@host)` — agents, events, and pipelines auto-span nodes |
 
 ### Ecosystem
 
