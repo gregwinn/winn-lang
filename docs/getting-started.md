@@ -6,6 +6,27 @@ This guide walks you through installing Winn, creating your first project, and b
 
 ## 1. Install
 
+### curl (Linux & macOS)
+
+```sh
+curl -fsSL https://winn.ws/install.sh | bash
+```
+
+Requires Erlang/OTP 25+. The script detects your version, downloads the pre-built binary, installs to `~/.local/bin`, and verifies the install.
+
+If you don't have Erlang installed:
+
+```sh
+# macOS
+brew install erlang
+
+# Ubuntu / Debian
+sudo apt install erlang
+
+# Fedora
+sudo dnf install erlang
+```
+
 ### macOS (Homebrew)
 
 ```sh
@@ -22,13 +43,13 @@ rebar3 escriptize
 cp _build/default/bin/winn /usr/local/bin/
 ```
 
-Requires Erlang/OTP 28+ and rebar3.
+Requires Erlang/OTP 25+ and rebar3.
 
 ### Verify
 
 ```sh
 winn version
-# => winn 0.7.0
+# => winn 0.8.1
 
 winn help
 ```
@@ -36,7 +57,7 @@ winn help
 You should see:
 
 ```
-Winn 0.7.0 - a compiled language on the BEAM
+Winn 0.8.1 - a compiled language on the BEAM
 
 Usage:
   winn new <name>         Create a new Winn project
