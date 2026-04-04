@@ -2,6 +2,12 @@
 
 All notable changes to the Winn language are documented here.
 
+## [0.8.1] - 2026-04-03
+
+### Fixes
+- **Agent tests passing** — removed stale committed `winn_parser.erl` generated file that was shadowing the yecc-compiled parser and preventing `agent` keyword from being recognized
+- **CI cache correctness** — updated cache key to include `.yrl`/`.xrl` grammar file hashes, preventing stale parser beams from being restored across builds
+
 ## [0.8.0] - 2026-04-02
 
 ### Language
