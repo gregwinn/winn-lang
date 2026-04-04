@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  upload-binary:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Erlang/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27'
+          rebar3-version: '3.24'
+
+      - name: Restore rebar3 cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            _build
+            ~/.cache/rebar3
+          key: ${{ runner.os }}-rebar3-27-${{ hashFiles('rebar.lock', 'rebar.config', 'apps/**/*.yrl', 'apps/**/*.xrl') }}
+          restore-keys: |
+            ${{ runner.os }}-rebar3-27-
+
+      - name: Fetch dependencies
+        run: rebar3 get-deps
+
+      - name: Build escript
+        run: rebar3 escriptize
+
+      - name: Upload binary to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: _build/default/bin/winn
