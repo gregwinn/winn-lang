@@ -58,5 +58,7 @@ Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syn
 | Issue | Feature | Description |
 |-------|---------|-------------|
 | [#20](https://github.com/gregwinn/winn-lang/issues/20) | Example projects | Todo API, chat server, GitHub sync worker |
-| [#21](https://github.com/gregwinn/winn-lang/issues/21) | Package registry | `winn publish`, dependency resolution |
+| [#21](https://github.com/gregwinn/winn-lang/issues/21) | Package registry | Hosted Winn-native registry, `winn publish`, search, discovery |
 | [#101](https://github.com/gregwinn/winn-lang/issues/101) | Package registry v2 | Dependency resolution, lockfile, `winn search` |
+| [#110](https://github.com/gregwinn/winn-lang/issues/110) | curl installer | `curl -fsSL https://winn.ws/install.sh \| bash` — detect OS/arch, install pre-built binary |
+| [#111](https://github.com/gregwinn/winn-lang/issues/111) | apt + dnf packages | Native `.deb`/`.rpm` packages with hosted repos and GPG signing for Ubuntu and Fedora |
