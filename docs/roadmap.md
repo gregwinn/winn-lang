@@ -1,8 +1,8 @@
 # Winn Roadmap
 
-## Current Status — v0.7.0
+## Current Status — v0.8.1
 
-562 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
+Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
 
 ### What's Shipped
 
@@ -15,22 +15,12 @@
 | v0.5.0 | Production Readiness | Connection pooling, transactions, SQLite, model methods (`User.all`), migrations, generators (`winn create`), deployment |
 | v0.6.0 | Observability | Metrics module, live metrics dashboard (`winn metrics`), load testing (`winn bench`) |
 | v0.7.0 | Core Stdlib + Packages | File I/O, Regex, Timer, Retry, DateTime/String, package system (`winn add`/`winn remove`), [winn-redis](https://github.com/gregwinn/winn-redis), [winn-mongodb](https://github.com/gregwinn/winn-mongodb), [winn-amqp](https://github.com/gregwinn/winn-amqp) |
+| v0.8.0 | Web Framework + Agents | Static files, CORS, auth middleware, health checks, `agent` keyword with `@state` syntax and `async def`, compiles to GenServer |
+| v0.8.1 | Bug Fix | Fixed agent parser regression (stale committed `winn_parser.erl`); CI cache now busts on grammar changes |
 
 ---
 
 ## Coming Next
-
-### v0.8.0 — Web Framework + Agents
-
-| Issue | Feature | Description |
-|-------|---------|-------------|
-| [#47](https://github.com/gregwinn/winn-lang/issues/47) | Static files | Serve CSS/JS/images from a directory |
-| [#48](https://github.com/gregwinn/winn-lang/issues/48) | CORS | Built-in CORS middleware |
-| [#49](https://github.com/gregwinn/winn-lang/issues/49) | Sessions | Cookie and session support |
-| [#50](https://github.com/gregwinn/winn-lang/issues/50) | File uploads | Multipart form data parsing |
-| [#51](https://github.com/gregwinn/winn-lang/issues/51) | Auth middleware | Bearer token and session auth |
-| [#65](https://github.com/gregwinn/winn-lang/issues/65) | Health checks | `/healthz` and `/ready` for Kubernetes |
-| [#102](https://github.com/gregwinn/winn-lang/issues/102) | **`agent` keyword** | First-class stateful actors — `agent Counter` with `@state` syntax, `async def` for cast, compiles to GenServer |
 
 ### v0.9.0 — Developer Tooling
 
