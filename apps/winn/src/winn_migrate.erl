@@ -1,12 +1,12 @@
 %% winn_migrate.erl
 %% Database migration runner.
-%% Discovers migrations in migrations/*.winn, tracks applied state
+%% Discovers migrations in db/migrations/*.winn, tracks applied state
 %% in a schema_migrations table, runs up/down in transactions.
 
 -module(winn_migrate).
 -export([migrate/1, rollback/1, status/0, ensure_migrations_table/0]).
 
--define(MIGRATIONS_DIR, "migrations").
+-define(MIGRATIONS_DIR, "db/migrations").
 -define(BUILD_DIR, "_build/migrations").
 
 %% ── Public API ───────────────────────────────────────────────────────────────

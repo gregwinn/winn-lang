@@ -2,6 +2,26 @@
 
 All notable changes to the Winn language are documented here.
 
+## [Unreleased]
+
+### Breaking Changes
+- **Generator paths reorganized** — `winn create` now outputs to Rails-style subdirectories. Existing projects must move files manually:
+  - Models: `src/*.winn` → `src/models/*.winn`
+  - Migrations: `migrations/` → `db/migrations/`
+  - Tasks: `tasks/` → `src/tasks/`
+  - Routers renamed to Controllers: `src/name.winn` → `src/controllers/name_controller.winn` (module `NameController`)
+
+### CLI
+- **`winn new`** — scaffold now creates `src/models/`, `src/controllers/`, `src/tasks/`, `test/`, `db/migrations/`, `config/`, and `db/seeds.winn`
+- **`winn create model`** — output path: `src/models/<name>.winn`
+- **`winn create migration`** — output path: `db/migrations/<timestamp>_<name>.winn`
+- **`winn create task`** — output path: `src/tasks/<name>.winn`
+- **`winn create router`** — output path: `src/controllers/<name>_controller.winn`, module `<Name>Controller`
+- **`winn create scaffold`** — model → `src/models/`, controller → `src/controllers/`, test → `test/`
+- **`winn migrate`** — reads migrations from `db/migrations/` (was `migrations/`)
+
+---
+
 ## [0.8.1] - 2026-04-03
 
 ### Fixes
