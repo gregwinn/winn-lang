@@ -249,13 +249,21 @@ scaffold(AppName) ->
     RebarFile = AppName ++ "/rebar.config",
     GitignoreFile = AppName ++ "/.gitignore",
     PackageFile = AppName ++ "/package.json",
+    SeedsFile = AppName ++ "/db/seeds.winn",
     try
         ok = file:make_dir(AppName),
         ok = file:make_dir(SrcDir),
+        ok = filelib:ensure_path(AppName ++ "/src/models"),
+        ok = filelib:ensure_path(AppName ++ "/src/controllers"),
+        ok = filelib:ensure_path(AppName ++ "/src/tasks"),
+        ok = filelib:ensure_path(AppName ++ "/test"),
+        ok = filelib:ensure_path(AppName ++ "/db/migrations"),
+        ok = filelib:ensure_path(AppName ++ "/config"),
         ok = file:write_file(WinnFile, starter_winn(AppName)),
         ok = file:write_file(RebarFile, starter_rebar(AppName)),
         ok = file:write_file(GitignoreFile, gitignore_content()),
         ok = file:write_file(PackageFile, starter_package_json(AppName)),
+        ok = file:write_file(SeedsFile, seeds_content()),
         ok
     catch
         error:{badmatch, {error, Reason}} ->
@@ -281,6 +289,9 @@ starter_rebar(AppName) ->
 
 gitignore_content() ->
     "_build/\nebin/\n*.beam\n_packages/\n".
+
+seeds_content() ->
+    "# db/seeds.winn\n# Seed your database here.\n\nmodule Seeds\n  def run()\n    IO.puts(\"Seeding database...\")\n  end\nend\n".
 
 starter_package_json(AppName) ->
     BaseName = filename:basename(AppName),

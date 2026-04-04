@@ -116,18 +116,27 @@ Generate code from templates. `winn c` is shorthand.
 
 ```sh
 winn create model User name:string email:string
+# => src/models/user.winn
+
 winn create migration CreateUsers name:string
+# => db/migrations/TIMESTAMP_create_users.winn
+
 winn create task db:seed
+# => src/tasks/db_seed.winn
+
 winn create router Api
+# => src/controllers/api_controller.winn  (module ApiController)
+
 winn create scaffold Post title:string body:text
+# => src/models/post.winn, src/controllers/post_controller.winn, test/post_test.winn
 ```
 
-Scaffold generates model + CRUD router + test file.
+Scaffold generates model + CRUD controller + test file.
 
 <a id="winn-migrate"></a>
 ### `winn migrate`
 
-Run pending database migrations from `migrations/*.winn`.
+Run pending database migrations from `db/migrations/*.winn`.
 
 ```sh
 winn migrate              # run all pending
@@ -155,7 +164,7 @@ winn task db:seed
 winn task db:migrate
 ```
 
-Tasks are modules with `use Winn.Task` and a `run/1` function in `tasks/` or `src/`.
+Tasks are modules with `use Winn.Task` and a `run/1` function in `src/tasks/`.
 
 <a id="winn-add"></a>
 ### `winn add <package>`

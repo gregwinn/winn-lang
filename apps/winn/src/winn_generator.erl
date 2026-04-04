@@ -11,7 +11,8 @@ generate(model, [Name | FieldArgs]) ->
     ModName = to_pascal(Name),
     TableName = to_snake(Name) ++ "s",
     Content = model_template(ModName, TableName, Fields),
-    Path = "src/" ++ to_snake(Name) ++ ".winn",
+    ok = filelib:ensure_path("src/models"),
+    Path = "src/models/" ++ to_snake(Name) ++ ".winn",
     write_file(Path, Content);
 
 generate(migration, [Name | FieldArgs]) ->
@@ -19,8 +20,8 @@ generate(migration, [Name | FieldArgs]) ->
     Timestamp = timestamp(),
     FileName = Timestamp ++ "_" ++ to_snake(Name),
     Content = migration_template(to_pascal(Name), Fields),
-    Path = "migrations/" ++ FileName ++ ".winn",
-    ok = filelib:ensure_path("migrations"),
+    Path = "db/migrations/" ++ FileName ++ ".winn",
+    ok = filelib:ensure_path("db/migrations"),
     write_file(Path, Content);
 
 generate(task, [Name]) ->
@@ -29,24 +30,26 @@ generate(task, [Name]) ->
     ModName = "Tasks." ++ lists:flatten(lists:join(".", ModParts)),
     FileName = lists:flatten(lists:join("_", Parts)),
     Content = task_template(ModName),
-    Path = "tasks/" ++ FileName ++ ".winn",
-    ok = filelib:ensure_path("tasks"),
+    Path = "src/tasks/" ++ FileName ++ ".winn",
+    ok = filelib:ensure_path("src/tasks"),
     write_file(Path, Content);
 
 generate(router, [Name]) ->
-    ModName = to_pascal(Name),
+    ModName = to_pascal(Name) ++ "Controller",
     Content = router_template(ModName),
-    Path = "src/" ++ to_snake(Name) ++ ".winn",
+    ok = filelib:ensure_path("src/controllers"),
+    Path = "src/controllers/" ++ to_snake(Name) ++ "_controller.winn",
     write_file(Path, Content);
 
 generate(scaffold, [Name | FieldArgs]) ->
-    Fields = parse_fields(FieldArgs),
+    _Fields = parse_fields(FieldArgs),
     %% Generate model
     generate(model, [Name | FieldArgs]),
-    %% Generate router
+    %% Generate controller
     ModName = to_pascal(Name),
     RouterContent = scaffold_router_template(ModName, to_snake(Name)),
-    RouterPath = "src/" ++ to_snake(Name) ++ "_router.winn",
+    ok = filelib:ensure_path("src/controllers"),
+    RouterPath = "src/controllers/" ++ to_snake(Name) ++ "_controller.winn",
     write_file(RouterPath, RouterContent),
     %% Generate test
     TestContent = scaffold_test_template(ModName),
@@ -151,7 +154,7 @@ router_template(ModName) ->
 
 scaffold_router_template(ModName, SnakeName) ->
     lists:flatten(io_lib:format(
-        "module ~sRouter~n"
+        "module ~sController~n"
         "  use Winn.Router~n"
         "~n"
         "  def routes()~n"
