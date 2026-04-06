@@ -89,6 +89,12 @@ main(Args) ->
         {rollback, RollbackArgs} ->
             run_rollback(RollbackArgs);
 
+        {fmt, FmtArgs} ->
+            run_fmt(FmtArgs);
+
+        {fmt_check, FmtArgs} ->
+            run_fmt_check(FmtArgs);
+
         {deps, Sub} ->
             Result = run_deps(Sub),
             case Result of
@@ -134,6 +140,12 @@ parse_args(["metrics" | Args])     -> {metrics, Args};
 parse_args(["release" | Args])     -> {release, Args};
 parse_args(["migrate" | Args])     -> {migrate, Args};
 parse_args(["rollback" | Args])    -> {rollback, Args};
+parse_args(["fmt"])                 -> {fmt, []};
+parse_args(["fmt" | Args])         ->
+    case lists:member("--check", Args) of
+        true  -> {fmt_check, Args -- ["--check"]};
+        false -> {fmt, Args}
+    end;
 parse_args(["deps" | Sub])         -> {deps, Sub};
 parse_args(["version" | _])        -> version;
 parse_args(["-v" | _])             -> version;
@@ -733,6 +745,65 @@ find_doc_files([]) ->
 find_doc_files(Paths) ->
     lists:filter(fun filelib:is_file/1, Paths).
 
+%% ── Formatter ───────────────────────────────────────────────────────────
+
+run_fmt([]) ->
+    Files = find_winn_files(),
+    case Files of
+        [] ->
+            io:format("No .winn files found in src/ or current directory.~n"),
+            halt(0);
+        _ ->
+            lists:foreach(fun(F) ->
+                case winn_formatter:format_file(F) of
+                    {ok, Formatted} ->
+                        file:write_file(F, Formatted),
+                        io:format("  formatted  ~s~n", [F]);
+                    {error, Reason} ->
+                        io:format("  error      ~s: ~p~n", [F, Reason])
+                end
+            end, Files),
+            halt(0)
+    end;
+run_fmt(Files) ->
+    lists:foreach(fun(F) ->
+        case winn_formatter:format_file(F) of
+            {ok, Formatted} ->
+                file:write_file(F, Formatted),
+                io:format("  formatted  ~s~n", [F]);
+            {error, Reason} ->
+                io:format("  error      ~s: ~p~n", [F, Reason])
+        end
+    end, Files),
+    halt(0).
+
+run_fmt_check([]) ->
+    run_fmt_check(find_winn_files());
+run_fmt_check(Files) ->
+    Changed = lists:filtermap(fun(F) ->
+        case winn_formatter:check_file(F) of
+            ok -> false;
+            {changed, _} ->
+                io:format("  unformatted  ~s~n", [F]),
+                {true, F}
+        end
+    end, Files),
+    case Changed of
+        [] ->
+            io:format("All files formatted.~n"),
+            halt(0);
+        _ ->
+            io:format("~B file(s) need formatting. Run `winn fmt` to fix.~n", [length(Changed)]),
+            halt(1)
+    end.
+
+find_winn_files() ->
+    SrcFiles = filelib:wildcard("src/*.winn"),
+    case SrcFiles of
+        [] -> filelib:wildcard("*.winn");
+        _  -> SrcFiles
+    end.
+
 %% ── Deps subcommand ─────────────────────────────────────────────────────
 
 run_deps(["list"])              -> winn_deps:list();
@@ -785,6 +856,9 @@ print_usage() ->
         "  winn start <module>     Start with a specific module~n"
         "  winn test               Run all tests in test/~n"
         "  winn test <file>        Run a specific test file~n"
+        "  winn fmt                Format all .winn files in place~n"
+        "  winn fmt <file>         Format a specific file~n"
+        "  winn fmt --check        Check formatting without changing (CI)~n"
         "  winn docs               Generate API docs with dependency graph~n"
         "  winn docs <file>        Generate docs for a single file~n"
         "  winn watch              Watch files and hot-reload with live dashboard~n"
