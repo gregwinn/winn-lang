@@ -552,7 +552,32 @@ winn c model User   # shorthand
 
 ---
 
-## 18. Database Migrations
+## 18. Code Formatting
+
+Format your code for consistent style with `winn fmt`:
+
+```sh
+winn fmt                   # format all .winn files
+winn fmt src/app.winn      # format a specific file
+winn fmt --check           # check formatting without modifying (CI)
+```
+
+---
+
+## 19. Linting
+
+Run static analysis to catch common issues:
+
+```sh
+winn lint                  # lint all .winn files
+winn lint src/app.winn     # lint a specific file
+```
+
+The linter checks for unused variables, unused imports/aliases, naming conventions, redundant boolean comparisons, empty function bodies, and more. See [`winn lint`](cli.md#winn-lint) for the full list of rules.
+
+---
+
+## 20. Database Migrations
 
 Manage your database schema with migrations:
 
@@ -564,7 +589,7 @@ winn migrate --status     # Show migration status
 
 ---
 
-## 19. Deployment
+## 21. Deployment
 
 Build production releases:
 
@@ -575,7 +600,7 @@ winn release --docker     # Generate a Dockerfile
 
 ---
 
-## 20. Metrics and Load Testing
+## 22. Metrics and Load Testing
 
 Monitor your app with built-in metrics:
 
@@ -600,7 +625,7 @@ winn bench bench/api_bench.winn
 
 ---
 
-## 21. Packages
+## 23. Packages
 
 Install optional add-on packages with `winn add`:
 

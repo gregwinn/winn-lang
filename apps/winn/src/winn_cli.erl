@@ -95,6 +95,9 @@ main(Args) ->
         {fmt_check, FmtArgs} ->
             run_fmt_check(FmtArgs);
 
+        {lint, LintArgs} ->
+            run_lint(LintArgs);
+
         {deps, Sub} ->
             Result = run_deps(Sub),
             case Result of
@@ -120,21 +123,31 @@ main(Args) ->
 parse_args(["new", Name])          -> {new, Name};
 parse_args(["compile"])            -> {compile, []};
 parse_args(["compile", File])      -> {compile, [File]};
+parse_args(["c"])                  -> {compile, []};
+parse_args(["c", File])            -> {compile, [File]};
 parse_args(["run", File | Args])   -> {run, File, Args};
+parse_args(["r", File | Args])     -> {run, File, Args};
 parse_args(["start" | Args])       -> {start, Args};
+parse_args(["s" | Args])           -> {start, Args};
 parse_args(["console" | _])        -> console;
+parse_args(["con" | _])            -> console;
 parse_args(["test"])                -> {test, []};
 parse_args(["test" | Args])        -> {test, Args};
+parse_args(["t"])                  -> {test, []};
+parse_args(["t" | Args])          -> {test, Args};
 parse_args(["docs"])                -> {docs, []};
 parse_args(["docs" | Args])        -> {docs, Args};
+parse_args(["d"])                  -> {docs, []};
+parse_args(["d" | Args])          -> {docs, Args};
 parse_args(["watch" | Args])       -> {watch, Args};
+parse_args(["w" | Args])          -> {watch, Args};
 parse_args(["task" | Args])        -> {task, Args};
 parse_args(["create" | Args])      -> {create, Args};
 parse_args(["add" | Args])         -> {pkg_add, Args};
 parse_args(["remove" | Args])      -> {pkg_remove, Args};
 parse_args(["packages" | _])       -> pkg_list;
 parse_args(["install" | _])        -> pkg_install;
-parse_args(["c" | Args])           -> {create, Args};
+parse_args(["g" | Args])           -> {create, Args};
 parse_args(["bench" | Args])       -> {bench, Args};
 parse_args(["metrics" | Args])     -> {metrics, Args};
 parse_args(["release" | Args])     -> {release, Args};
@@ -146,11 +159,22 @@ parse_args(["fmt" | Args])         ->
         true  -> {fmt_check, Args -- ["--check"]};
         false -> {fmt, Args}
     end;
+parse_args(["f"])                   -> {fmt, []};
+parse_args(["f" | Args])           ->
+    case lists:member("--check", Args) of
+        true  -> {fmt_check, Args -- ["--check"]};
+        false -> {fmt, Args}
+    end;
+parse_args(["lint"])                 -> {lint, []};
+parse_args(["lint" | Args])         -> {lint, Args};
+parse_args(["l"])                   -> {lint, []};
+parse_args(["l" | Args])           -> {lint, Args};
 parse_args(["deps" | Sub])         -> {deps, Sub};
 parse_args(["version" | _])        -> version;
 parse_args(["-v" | _])             -> version;
 parse_args(["--version" | _])      -> version;
 parse_args(["help" | _])           -> help;
+parse_args(["-h" | _])            -> help;
 parse_args([])                     -> help;
 parse_args(_)                      -> unknown.
 
@@ -815,6 +839,42 @@ find_winn_files() ->
         _  -> SrcFiles
     end.
 
+%% ── Lint ────────────────────────────────────────────────────────────────
+
+run_lint([]) ->
+    Files = find_winn_files(),
+    case Files of
+        [] ->
+            io:format("No .winn files found in src/ or current directory.~n"),
+            halt(0);
+        _ ->
+            run_lint(Files)
+    end;
+run_lint(Files) ->
+    AllViolations = lists:flatmap(fun(F) ->
+        case winn_lint:check_file(F) of
+            {ok, []} ->
+                [];
+            {ok, Violations} ->
+                {ok, Bin} = file:read_file(F),
+                Source = binary_to_list(Bin),
+                Formatted = winn_errors:format_diagnostics(Violations, Source, F),
+                io:put_chars(standard_error, Formatted),
+                Violations;
+            {error, Reason} ->
+                io:format(standard_error, "  error  ~s: ~p~n", [F, Reason]),
+                [Reason]
+        end
+    end, Files),
+    case AllViolations of
+        [] ->
+            io:format("No lint warnings.~n"),
+            halt(0);
+        _ ->
+            io:format(standard_error, "~B warning(s) found.~n", [length(AllViolations)]),
+            halt(1)
+    end.
+
 %% ── Deps subcommand ─────────────────────────────────────────────────────
 
 run_deps(["list"])              -> winn_deps:list();
@@ -858,38 +918,34 @@ print_version() ->
 print_usage() ->
     io:format(
         "Winn ~s - a compiled language on the BEAM~n~n"
-        "Usage:~n"
-        "  winn new <name>         Create a new Winn project~n"
-        "  winn compile            Compile all .winn files (src/ or current dir)~n"
-        "  winn compile <file>     Compile a single .winn file~n"
-        "  winn run <file>         Compile and run a single .winn file~n"
-        "  winn start              Compile project and start (keeps VM alive)~n"
-        "  winn start <module>     Start with a specific module~n"
-        "  winn test               Run all tests in test/~n"
-        "  winn test <file>        Run a specific test file~n"
-        "  winn fmt                Format all .winn files in place~n"
-        "  winn fmt <file>         Format a specific file~n"
-        "  winn fmt --check        Check formatting without changing (CI)~n"
-        "  winn docs               Generate API docs with dependency graph~n"
-        "  winn docs <file>        Generate docs for a single file~n"
-        "  winn watch              Watch files and hot-reload with live dashboard~n"
-        "  winn watch --start      Watch + start the app~n"
-        "  winn task <name>        Run a project task (e.g., winn task db:seed)~n"
-        "  winn bench <file>       Run load tests~n"
-        "  winn metrics            Live metrics dashboard~n"
-        "  winn release            Build a production release~n"
-        "  winn release --docker   Generate a Dockerfile~n"
-        "  winn add <package>      Install a Winn package~n"
-        "  winn remove <package>   Remove a package~n"
-        "  winn packages           List installed packages~n"
-        "  winn install            Install all packages from package.json~n"
-        "  winn create <type>      Generate code (model, migration, task, router, scaffold)~n"
-        "  winn c <type>           Shorthand for winn create~n"
-        "  winn migrate            Run pending database migrations~n"
-        "  winn rollback           Rollback last database migration~n"
-        "  winn deps               Manage dependencies~n"
-        "  winn console            Interactive console~n"
-        "  winn version            Show version~n"
-        "  winn help               Show this help text~n",
+        "Development:~n"
+        "  new <name>          Create a new project~n"
+        "  r, run <file>       Compile and run a file~n"
+        "  s, start [module]   Start project (keeps VM alive)~n"
+        "  t, test [file]      Run tests~n"
+        "  w, watch [--start]  Watch + hot-reload~n"
+        "  con, console        Interactive REPL~n~n"
+        "Code Quality:~n"
+        "  c, compile [file]   Compile .winn files~n"
+        "  f, fmt [file]       Format code (--check for CI)~n"
+        "  l, lint [file]      Static analysis~n"
+        "  d, docs [file]      Generate API docs~n~n"
+        "Generators:~n"
+        "  g, create <type>    Generate code (model, migration, ...)~n"
+        "  task <name>         Run a project task~n"
+        "  migrate             Run pending migrations~n"
+        "  rollback            Rollback last migration~n~n"
+        "Packages:~n"
+        "  add <pkg>           Install a package~n"
+        "  remove <pkg>        Remove a package~n"
+        "  packages            List installed~n"
+        "  install             Install all from package.json~n"
+        "  deps                Manage Erlang dependencies~n~n"
+        "Production:~n"
+        "  bench <file>        Load testing~n"
+        "  metrics             Live metrics dashboard~n"
+        "  release [--docker]  Build production release~n~n"
+        "  -v, version         Show version~n"
+        "  -h, help            Show this help~n",
         [get_version()]
     ).

@@ -5,6 +5,7 @@ All notable changes to the Winn language are documented here.
 ## [Unreleased]
 
 ### Breaking Changes
+- **`winn c` shortcut changed** — `c` now maps to `compile` (was `create`). Use `g` for generate/create instead.
 - **Generator paths reorganized** — `winn create` now outputs to Rails-style subdirectories. Existing projects must move files manually:
   - Models: `src/*.winn` → `src/models/*.winn`
   - Migrations: `migrations/` → `db/migrations/`
@@ -12,6 +13,10 @@ All notable changes to the Winn language are documented here.
   - Routers renamed to Controllers: `src/name.winn` → `src/controllers/name_controller.winn` (module `NameController`)
 
 ### CLI
+- **`winn fmt`** — code formatter for consistent style (`winn fmt`, `winn fmt --check`)
+- **`winn lint`** — static analysis linter with 10 rules: unused variables, unused imports/aliases, naming conventions, redundant boolean comparisons, empty function bodies, pipe-into-literal, single pipe, and large function detection
+- **Command shortcuts** — single-letter shortcuts for common commands: `r` (run), `s` (start), `t` (test), `f` (fmt), `l` (lint), `d` (docs), `w` (watch), `g` (create/generate), `c` (compile), `con` (console), `-h` (help)
+- **Grouped help menu** — `winn help` now organizes commands into categories: Development, Code Quality, Generators, Packages, Production
 - **`winn new`** — scaffold now creates `src/models/`, `src/controllers/`, `src/tasks/`, `test/`, `db/migrations/`, `config/`, and `db/seeds.winn`
 - **`winn create model`** — output path: `src/models/<name>.winn`
 - **`winn create migration`** — output path: `db/migrations/<timestamp>_<name>.winn`
