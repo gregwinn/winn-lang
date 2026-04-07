@@ -66,10 +66,19 @@ This creates:
 
 ```
 my_app/
-├── rebar.config       # Erlang build config
+├── rebar.config           # Erlang build config
 ├── .gitignore
-└── src/
-    └── my_app.winn    # Your first Winn file
+├── package.json
+├── src/
+│   ├── my_app.winn        # Your first Winn file
+│   ├── models/
+│   ├── controllers/
+│   └── tasks/
+├── test/
+├── db/
+│   ├── migrations/
+│   └── seeds.winn
+└── config/
 ```
 
 The generated `src/my_app.winn`:
@@ -137,15 +146,23 @@ A typical Winn project looks like this:
 
 ```
 my_app/
-├── rebar.config           # Dependencies and build config
+├── rebar.config               # Dependencies and build config
 ├── .gitignore
+├── package.json
 ├── src/
-│   ├── my_app.winn        # Application entry point
-│   ├── router.winn        # HTTP routes
-│   ├── user.winn          # User schema
-│   └── auth.winn          # Authentication logic
-├── ebin/                  # Compiled .beam files (generated)
-└── config/                # Configuration files (optional)
+│   ├── my_app.winn            # Application entry point
+│   ├── models/
+│   │   └── user.winn          # User schema
+│   ├── controllers/
+│   │   └── api_controller.winn  # HTTP routes
+│   └── tasks/
+│       └── db_seed.winn       # Background tasks
+├── test/
+├── db/
+│   ├── migrations/            # Database migrations
+│   └── seeds.winn
+├── config/                    # Configuration files
+└── ebin/                      # Compiled .beam files (generated)
 ```
 
 ---
@@ -516,10 +533,20 @@ Scaffold models, migrations, tasks, and routers:
 
 ```sh
 winn create model User name:string email:string
+# => src/models/user.winn
+
 winn create migration CreateUsers name:string email:string
+# => db/migrations/TIMESTAMP_create_users.winn
+
 winn create task db:seed
+# => src/tasks/db_seed.winn
+
 winn create router Api
+# => src/controllers/api_controller.winn  (module ApiController)
+
 winn create scaffold Post title:string body:text
+# => src/models/post.winn, src/controllers/post_controller.winn, test/post_test.winn
+
 winn c model User   # shorthand
 ```
 

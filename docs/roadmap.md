@@ -29,6 +29,7 @@ Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syn
 | [#52](https://github.com/gregwinn/winn-lang/issues/52) | Formatter | `winn fmt` for consistent code style |
 | [#53](https://github.com/gregwinn/winn-lang/issues/53) | Linter | `winn lint` for static analysis |
 | [#54](https://github.com/gregwinn/winn-lang/issues/54) | Scaffold | Improved `winn new` with test/, config/ |
+| [#114](https://github.com/gregwinn/winn-lang/issues/114) | Generator dirs | Rails-style subdirectories: `src/models/`, `src/controllers/`, `db/migrations/` |
 | [#55](https://github.com/gregwinn/winn-lang/issues/55) | LSP | Language server for IDE integration |
 | [#99](https://github.com/gregwinn/winn-lang/issues/99) | Codegen split | Split `winn_codegen.erl` into focused submodules |
 
