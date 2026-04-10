@@ -1,0 +1,19 @@
+name: winn
+arch: amd64
+platform: linux
+version: "${VERSION}"
+maintainer: "Greg Winn <greg@winn.ws>"
+description: "A Ruby/Elixir-inspired language that compiles to the BEAM"
+homepage: "https://winn.ws"
+license: "MIT"
+section: "devel"
+priority: "optional"
+
+contents:
+  - src: _build/default/bin/winn
+    dst: /usr/local/bin/winn
+    file_info:
+      mode: 0755
+
+depends:
+  - erlang
