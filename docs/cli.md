@@ -20,6 +20,7 @@ brew tap gregwinn/winn && brew install winn
 | [`winn fmt [file]`](#winn-fmt) | `f` | Format code (`--check` for CI) |
 | [`winn lint [file]`](#winn-lint) | `l` | Static analysis linter |
 | [`winn docs [file]`](#winn-docs) | `d` | Generate API docs |
+| [`winn lsp`](#winn-lsp) | | Start language server (stdio) |
 | [`winn create <type>`](#winn-create) | `g` | Generate code (model, migration, ...) |
 | [`winn migrate`](#winn-migrate) | | Run database migrations |
 | [`winn rollback`](#winn-rollback) | | Rollback migrations |
@@ -40,13 +41,21 @@ brew tap gregwinn/winn && brew install winn
 ## Command Details
 
 <a id="winn-new"></a>
-### `winn new <name>`
+### `winn new <name> [--api | --minimal]`
 
-Create a new project with `src/`, `rebar.config`, `package.json`, and `.gitignore`.
+Create a new project. Three modes available:
 
 ```sh
-winn new my_app
+winn new my_app              # full scaffold (default)
+winn new my_app --api        # API project with router + health endpoint
+winn new my_app --minimal    # just src/ and rebar.config
 ```
+
+**Default** creates: `src/`, `test/`, `config/`, `db/migrations/`, `README.md`, `.env.example`, `.gitignore`, `package.json`.
+
+**`--api`** adds a router with `use Winn.Router`, a `/api/health` endpoint, a health controller, and `Server.start` in `main()`.
+
+**`--minimal`** creates only `src/<name>.winn`, `rebar.config`, `.gitignore`, and `package.json`.
 
 <a id="winn-compile"></a>
 ### `winn compile [file]`
@@ -242,6 +251,22 @@ winn lint src/app.winn     # lint a specific file
 | `large_function` | Complexity | Function body exceeds 50 expressions |
 
 Exits with code 0 if no warnings, code 1 if warnings found.
+
+<a id="winn-lsp"></a>
+### `winn lsp`
+
+Start the Language Server Protocol server on stdio. Provides IDE integration for editors that support LSP (VS Code, Neovim, Helix, etc.).
+
+```sh
+winn lsp   # starts language server on stdio
+```
+
+**Capabilities:**
+
+- **Diagnostics** — inline compile errors from lexer, parser, semantic, and transform phases. Triggered on file open, change, and save.
+- **Autocomplete** — dot-triggered completions for 14 modules: IO, String, Enum, List, Map, Server, HTTP, JSON, Logger, File, Repo, System, Task, Regex, Agent.
+
+**VS Code integration:** In the [Winn VS Code extension](https://marketplace.visualstudio.com/items?itemName=gregwinn.language-winn-vscode), set `"winn.lsp.command": "winn lsp"`.
 
 <a id="winn-docs"></a>
 ### `winn docs [file]`

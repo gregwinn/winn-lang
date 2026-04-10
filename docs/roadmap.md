@@ -1,8 +1,8 @@
 # Winn Roadmap
 
-## Current Status — v0.8.1
+## Current Status — v0.9.0
 
-Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics.
+635 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics. LSP with inline errors and autocomplete.
 
 ### What's Shipped
 
@@ -16,25 +16,11 @@ Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syn
 | v0.6.0 | Observability | Metrics module, live metrics dashboard (`winn metrics`), load testing (`winn bench`) |
 | v0.7.0 | Core Stdlib + Packages | File I/O, Regex, Timer, Retry, DateTime/String, package system (`winn add`/`winn remove`), [winn-redis](https://github.com/gregwinn/winn-redis), [winn-mongodb](https://github.com/gregwinn/winn-mongodb), [winn-amqp](https://github.com/gregwinn/winn-amqp) |
 | v0.8.0 | Web Framework + Agents | Static files, CORS, auth middleware, health checks, `agent` keyword with `@state` syntax and `async def`, compiles to GenServer |
-| v0.8.1 | Bug Fix | Fixed agent parser regression (stale committed `winn_parser.erl`); CI cache now busts on grammar changes |
+| v0.9.0 | Developer Tooling | `winn fmt`, `winn lint` (10 rules), `winn lsp` (diagnostics + autocomplete), improved `winn new` (--api, --minimal), command shortcuts, codegen split |
 
 ---
 
 ## Coming Next
-
-### v0.9.0 — Developer Tooling
-
-| Issue | Feature | Description |
-|-------|---------|-------------|
-| [#52](https://github.com/gregwinn/winn-lang/issues/52) | ~~Formatter~~ | ~~`winn fmt` for consistent code style~~ **done** |
-| [#53](https://github.com/gregwinn/winn-lang/issues/53) | ~~Linter~~ | ~~`winn lint` for static analysis~~ **done** |
-| [#54](https://github.com/gregwinn/winn-lang/issues/54) | ~~Scaffold~~ | ~~Improved `winn new` with test/, config/~~ **done** |
-| [#114](https://github.com/gregwinn/winn-lang/issues/114) | ~~Generator dirs~~ | ~~Rails-style subdirectories~~ **done** |
-| [#117](https://github.com/gregwinn/winn-lang/issues/117) | Lint config | Configurable lint rules via `.winn-lint.json` |
-| [#118](https://github.com/gregwinn/winn-lang/issues/118) | LSP Phase 1 | Diagnostics — compile errors + lint warnings in editor |
-| [#119](https://github.com/gregwinn/winn-lang/issues/119) | LSP Phase 2 | Navigation — go-to-definition, hover, document symbols |
-| [#120](https://github.com/gregwinn/winn-lang/issues/120) | LSP Phase 3 | Completion, find references, formatting integration |
-| [#99](https://github.com/gregwinn/winn-lang/issues/99) | Codegen split | Split `winn_codegen.erl` into focused submodules |
 
 ### v0.10.0 — Hardening
 

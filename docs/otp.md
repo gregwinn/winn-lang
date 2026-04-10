@@ -1,6 +1,70 @@
 # OTP Integration
 
-Winn has first-class support for OTP behaviours via the `use` directive.
+Winn has first-class support for OTP behaviours. The `agent` keyword provides zero-boilerplate stateful actors, and `use` directives give full access to GenServer, Supervisor, Application, and Task.
+
+## Agent
+
+The `agent` keyword creates a stateful actor that compiles to a GenServer under the hood — no `handle_call`, `init`, or boilerplate required.
+
+### Defining an Agent
+
+```winn
+agent Counter
+  state count = 0
+
+  def increment()
+    @count = @count + 1
+  end
+
+  def increment(amount)
+    @count = @count + amount
+  end
+
+  def value()
+    @count
+  end
+
+  def reset()
+    @count = 0
+    :ok
+  end
+
+  async def log_reset()
+    @count = 0
+  end
+end
+```
+
+### Using an Agent
+
+```winn
+counter = Counter.start()         # start with default state
+Counter.increment(counter)        # synchronous call, returns 1
+Counter.increment(counter, 5)     # returns 6
+IO.puts(Counter.value(counter))   # prints 6
+Counter.log_reset(counter)        # fire-and-forget (async)
+```
+
+### Start with Overrides
+
+```winn
+counter = Counter.start(%{count: 100})
+IO.puts(Counter.value(counter))   # prints 100
+```
+
+### Key Concepts
+
+- **`state name = default`** — declare state variables with defaults
+- **`@name`** — read state; **`@name = expr`** — write state
+- **`def`** — synchronous functions (gen_server:call)
+- **`async def`** — fire-and-forget functions (gen_server:cast), always returns `:ok`
+- **`start()`** — start with defaults; **`start(%{...})`** — merge overrides
+- Each agent instance is an independent BEAM process
+- Agents support multi-clause functions with pattern matching and guards
+
+### Agent vs GenServer
+
+Use `agent` when you want clean stateful actors with minimal code. Use `use Winn.GenServer` when you need full control over OTP callbacks, custom `handle_info`, or process linking.
 
 ## GenServer
 

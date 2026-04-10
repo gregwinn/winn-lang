@@ -49,7 +49,7 @@ Requires Erlang/OTP 25+ and rebar3.
 
 ```sh
 winn version
-# => winn 0.8.1
+# => winn 0.9.0
 
 winn help
 ```
@@ -57,7 +57,7 @@ winn help
 You should see:
 
 ```
-Winn 0.8.1 - a compiled language on the BEAM
+Winn 0.9.0 - a compiled language on the BEAM
 
 Usage:
   winn new <name>         Create a new Winn project
