@@ -230,5 +230,5 @@ get_binding(Name) when is_list(Name) ->
 get_version() ->
     case application:get_key(winn, vsn) of
         {ok, Vsn} -> Vsn;
-        _         -> "0.8.1"
+        _         -> "0.9.0"
     end.

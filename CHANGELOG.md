@@ -2,7 +2,7 @@
 
 All notable changes to the Winn language are documented here.
 
-## [Unreleased]
+## [0.9.0] - 2026-04-09
 
 ### Breaking Changes
 - **`winn c` shortcut changed** — `c` now maps to `compile` (was `create`). Use `g` for generate/create instead.
@@ -12,18 +12,16 @@ All notable changes to the Winn language are documented here.
   - Tasks: `tasks/` → `src/tasks/`
   - Routers renamed to Controllers: `src/name.winn` → `src/controllers/name_controller.winn` (module `NameController`)
 
-### CLI
+### Developer Tooling
 - **`winn fmt`** — code formatter for consistent style (`winn fmt`, `winn fmt --check`)
 - **`winn lint`** — static analysis linter with 10 rules: unused variables, unused imports/aliases, naming conventions, redundant boolean comparisons, empty function bodies, pipe-into-literal, single pipe, and large function detection
-- **Command shortcuts** — single-letter shortcuts for common commands: `r` (run), `s` (start), `t` (test), `f` (fmt), `l` (lint), `d` (docs), `w` (watch), `g` (create/generate), `c` (compile), `con` (console), `-h` (help)
-- **Grouped help menu** — `winn help` now organizes commands into categories: Development, Code Quality, Generators, Packages, Production
-- **`winn new`** — scaffold now creates `src/models/`, `src/controllers/`, `src/tasks/`, `test/`, `db/migrations/`, `config/`, and `db/seeds.winn`
-- **`winn create model`** — output path: `src/models/<name>.winn`
-- **`winn create migration`** — output path: `db/migrations/<timestamp>_<name>.winn`
-- **`winn create task`** — output path: `src/tasks/<name>.winn`
-- **`winn create router`** — output path: `src/controllers/<name>_controller.winn`, module `<Name>Controller`
-- **`winn create scaffold`** — model → `src/models/`, controller → `src/controllers/`, test → `test/`
-- **`winn migrate`** — reads migrations from `db/migrations/` (was `migrations/`)
+- **`winn lsp`** — Language Server Protocol implementation with stdio transport, inline compile error diagnostics, and dot-triggered autocomplete for 14 modules
+- **`winn new` improved** — three scaffold modes: default (full structure with test/, config/, README, .env.example), `--api` (router + health endpoint), `--minimal` (just src/ and rebar.config)
+- **Command shortcuts** — single-letter shortcuts: `r` (run), `s` (start), `t` (test), `f` (fmt), `l` (lint), `d` (docs), `w` (watch), `g` (create/generate), `c` (compile), `con` (console)
+- **Grouped help menu** — `winn help` now organizes commands into categories
+
+### Compiler
+- **Codegen split** — `winn_codegen.erl` split into `winn_codegen_resolve.erl` (module name resolution) and `winn_codegen_pattern.erl` (pattern generation) for maintainability
 
 ---
 
