@@ -9,15 +9,20 @@
 main(Args) ->
     winn_errors:set_color(is_tty()),
     case parse_args(Args) of
-        {new, Name} ->
-            case scaffold(Name) of
+        {new, Name, Opts} ->
+            case scaffold(Name, Opts) of
                 ok ->
-                    io:format("Created project ~s~n", [Name]),
+                    io:format("Created project ~s~n~n", [Name]),
+                    io:format("  cd ~s~n  winn run src/~s.winn~n~n", [Name, filename:basename(Name)]),
                     halt(0);
                 {error, Reason} ->
                     io:format("Error creating project: ~p~n", [Reason]),
                     halt(1)
             end;
+
+        {new_usage} ->
+            io:format("Usage: winn new <name> [--api | --minimal]~n"),
+            halt(1);
 
         {compile, []} ->
             compile_all();
@@ -89,12 +94,24 @@ main(Args) ->
         {rollback, RollbackArgs} ->
             run_rollback(RollbackArgs);
 
+        {fmt, FmtArgs} ->
+            run_fmt(FmtArgs);
+
+        {fmt_check, FmtArgs} ->
+            run_fmt_check(FmtArgs);
+
+        {lint, LintArgs} ->
+            run_lint(LintArgs);
+
         {deps, Sub} ->
             Result = run_deps(Sub),
             case Result of
                 ok -> halt(0);
                 {error, _} -> halt(1)
             end;
+
+        lsp ->
+            winn_lsp:start();
 
         version ->
             print_version(),
@@ -111,34 +128,63 @@ main(Args) ->
 
 %% ── Argument parsing ──────────────────────────────────────────────────────
 
-parse_args(["new", Name])          -> {new, Name};
+parse_args(["new", Name | Flags])   -> {new, Name, parse_new_flags(Flags)};
+parse_args(["new"])                 -> {new_usage};
 parse_args(["compile"])            -> {compile, []};
 parse_args(["compile", File])      -> {compile, [File]};
+parse_args(["c"])                  -> {compile, []};
+parse_args(["c", File])            -> {compile, [File]};
 parse_args(["run", File | Args])   -> {run, File, Args};
+parse_args(["r", File | Args])     -> {run, File, Args};
 parse_args(["start" | Args])       -> {start, Args};
+parse_args(["s" | Args])           -> {start, Args};
 parse_args(["console" | _])        -> console;
+parse_args(["con" | _])            -> console;
 parse_args(["test"])                -> {test, []};
 parse_args(["test" | Args])        -> {test, Args};
+parse_args(["t"])                  -> {test, []};
+parse_args(["t" | Args])          -> {test, Args};
 parse_args(["docs"])                -> {docs, []};
 parse_args(["docs" | Args])        -> {docs, Args};
+parse_args(["d"])                  -> {docs, []};
+parse_args(["d" | Args])          -> {docs, Args};
 parse_args(["watch" | Args])       -> {watch, Args};
+parse_args(["w" | Args])          -> {watch, Args};
 parse_args(["task" | Args])        -> {task, Args};
 parse_args(["create" | Args])      -> {create, Args};
 parse_args(["add" | Args])         -> {pkg_add, Args};
 parse_args(["remove" | Args])      -> {pkg_remove, Args};
 parse_args(["packages" | _])       -> pkg_list;
 parse_args(["install" | _])        -> pkg_install;
-parse_args(["c" | Args])           -> {create, Args};
+parse_args(["g" | Args])           -> {create, Args};
 parse_args(["bench" | Args])       -> {bench, Args};
 parse_args(["metrics" | Args])     -> {metrics, Args};
 parse_args(["release" | Args])     -> {release, Args};
 parse_args(["migrate" | Args])     -> {migrate, Args};
 parse_args(["rollback" | Args])    -> {rollback, Args};
+parse_args(["fmt"])                 -> {fmt, []};
+parse_args(["fmt" | Args])         ->
+    case lists:member("--check", Args) of
+        true  -> {fmt_check, Args -- ["--check"]};
+        false -> {fmt, Args}
+    end;
+parse_args(["f"])                   -> {fmt, []};
+parse_args(["f" | Args])           ->
+    case lists:member("--check", Args) of
+        true  -> {fmt_check, Args -- ["--check"]};
+        false -> {fmt, Args}
+    end;
+parse_args(["lint"])                 -> {lint, []};
+parse_args(["lint" | Args])         -> {lint, Args};
+parse_args(["l"])                   -> {lint, []};
+parse_args(["l" | Args])           -> {lint, Args};
+parse_args(["lsp" | _])            -> lsp;
 parse_args(["deps" | Sub])         -> {deps, Sub};
 parse_args(["version" | _])        -> version;
 parse_args(["-v" | _])             -> version;
 parse_args(["--version" | _])      -> version;
 parse_args(["help" | _])           -> help;
+parse_args(["-h" | _])            -> help;
 parse_args([])                     -> help;
 parse_args(_)                      -> unknown.
 
@@ -242,20 +288,60 @@ start_project(Args) ->
 
 %% ── Scaffold ──────────────────────────────────────────────────────────────
 
-scaffold(AppName) ->
+parse_new_flags(Flags) ->
+    lists:foldl(fun("--api", Acc)     -> Acc#{mode => api};
+                   ("--minimal", Acc) -> Acc#{mode => minimal};
+                   (_, Acc)           -> Acc
+                end, #{mode => default}, Flags).
+
+scaffold(AppName, Opts) ->
     BaseName = filename:basename(AppName),
-    SrcDir = AppName ++ "/src",
-    WinnFile = SrcDir ++ "/" ++ BaseName ++ ".winn",
-    RebarFile = AppName ++ "/rebar.config",
-    GitignoreFile = AppName ++ "/.gitignore",
-    PackageFile = AppName ++ "/package.json",
+    Mode = maps:get(mode, Opts, default),
     try
         ok = file:make_dir(AppName),
-        ok = file:make_dir(SrcDir),
-        ok = file:write_file(WinnFile, starter_winn(AppName)),
-        ok = file:write_file(RebarFile, starter_rebar(AppName)),
-        ok = file:write_file(GitignoreFile, gitignore_content()),
-        ok = file:write_file(PackageFile, starter_package_json(AppName)),
+        ok = filelib:ensure_path(AppName ++ "/src"),
+        ok = file:write_file(AppName ++ "/rebar.config", scaffold_rebar(AppName)),
+        ok = file:write_file(AppName ++ "/.gitignore", scaffold_gitignore()),
+        ok = file:write_file(AppName ++ "/package.json", scaffold_package_json(BaseName)),
+        case Mode of
+            minimal ->
+                ok = file:write_file(AppName ++ "/src/" ++ BaseName ++ ".winn",
+                                     scaffold_winn_minimal(AppName));
+            api ->
+                ok = filelib:ensure_path(AppName ++ "/src/models"),
+                ok = filelib:ensure_path(AppName ++ "/src/controllers"),
+                ok = filelib:ensure_path(AppName ++ "/src/tasks"),
+                ok = filelib:ensure_path(AppName ++ "/test"),
+                ok = filelib:ensure_path(AppName ++ "/db/migrations"),
+                ok = filelib:ensure_path(AppName ++ "/config"),
+                ok = file:write_file(AppName ++ "/src/" ++ BaseName ++ ".winn",
+                                     scaffold_winn_api(AppName)),
+                ok = file:write_file(AppName ++ "/src/controllers/health_controller.winn",
+                                     scaffold_health_controller(AppName)),
+                ok = file:write_file(AppName ++ "/test/" ++ BaseName ++ "_test.winn",
+                                     scaffold_test(AppName)),
+                ok = file:write_file(AppName ++ "/config/config.winn",
+                                     scaffold_config(AppName)),
+                ok = file:write_file(AppName ++ "/db/seeds.winn", scaffold_seeds()),
+                ok = file:write_file(AppName ++ "/.env.example", scaffold_env_example()),
+                ok = file:write_file(AppName ++ "/README.md", scaffold_readme(AppName));
+            default ->
+                ok = filelib:ensure_path(AppName ++ "/src/models"),
+                ok = filelib:ensure_path(AppName ++ "/src/controllers"),
+                ok = filelib:ensure_path(AppName ++ "/src/tasks"),
+                ok = filelib:ensure_path(AppName ++ "/test"),
+                ok = filelib:ensure_path(AppName ++ "/db/migrations"),
+                ok = filelib:ensure_path(AppName ++ "/config"),
+                ok = file:write_file(AppName ++ "/src/" ++ BaseName ++ ".winn",
+                                     scaffold_winn_default(AppName)),
+                ok = file:write_file(AppName ++ "/test/" ++ BaseName ++ "_test.winn",
+                                     scaffold_test(AppName)),
+                ok = file:write_file(AppName ++ "/config/config.winn",
+                                     scaffold_config(AppName)),
+                ok = file:write_file(AppName ++ "/db/seeds.winn", scaffold_seeds()),
+                ok = file:write_file(AppName ++ "/.env.example", scaffold_env_example()),
+                ok = file:write_file(AppName ++ "/README.md", scaffold_readme(AppName))
+        end,
         ok
     catch
         error:{badmatch, {error, Reason}} ->
@@ -264,33 +350,161 @@ scaffold(AppName) ->
             {error, Reason}
     end.
 
-starter_winn(AppName) ->
-    ModName = to_pascal_case(AppName),
-    io_lib:format(
-        "module ~s\n  def main()\n    IO.puts(\"Hello from ~s!\")\n  end\nend\n",
-        [ModName, AppName]
-    ).
+%% Keep backward-compatible scaffold/1
+scaffold(AppName) -> scaffold(AppName, #{mode => default}).
 
-starter_rebar(AppName) ->
+%% ── Scaffold templates ──────────────────────────────────────────────────
+
+scaffold_winn_minimal(AppName) ->
+    Mod = to_pascal_case(AppName),
+    io_lib:format(
+        "module ~s\n"
+        "  def main()\n"
+        "    IO.puts(\"Hello from ~s!\")\n"
+        "  end\n"
+        "end\n", [Mod, AppName]).
+
+scaffold_winn_default(AppName) ->
+    Mod = to_pascal_case(AppName),
+    io_lib:format(
+        "module ~s\n"
+        "  def main()\n"
+        "    IO.puts(\"Hello from ~s!\")\n"
+        "  end\n"
+        "end\n", [Mod, AppName]).
+
+scaffold_winn_api(AppName) ->
+    Mod = to_pascal_case(AppName),
+    io_lib:format(
+        "module ~s\n"
+        "  use Winn.Router\n"
+        "\n"
+        "  def routes()\n"
+        "    [{:get, \"/api/health\", :health}]\n"
+        "  end\n"
+        "\n"
+        "  def health(conn)\n"
+        "    Server.json(conn, %{status: \"ok\"})\n"
+        "  end\n"
+        "\n"
+        "  def main()\n"
+        "    Server.start(~s, 4000)\n"
+        "    IO.puts(\"~s running on port 4000\")\n"
+        "  end\n"
+        "end\n", [Mod, Mod, AppName]).
+
+scaffold_health_controller(AppName) ->
+    Mod = to_pascal_case(AppName),
+    io_lib:format(
+        "module ~s.HealthController\n"
+        "  def check(conn)\n"
+        "    Server.json(conn, %{status: \"ok\", version: \"0.1.0\"})\n"
+        "  end\n"
+        "end\n", [Mod]).
+
+scaffold_test(AppName) ->
+    Mod = to_pascal_case(AppName),
+    io_lib:format(
+        "module ~sTest\n"
+        "  use Winn.Test\n"
+        "\n"
+        "  def test_hello()\n"
+        "    assert(true)\n"
+        "  end\n"
+        "end\n", [Mod]).
+
+scaffold_config(_AppName) ->
+    "module Config\n"
+    "  def database()\n"
+    "    %{\n"
+    "      adapter: :postgres,\n"
+    "      hostname: System.get_env(\"DB_HOST\", \"localhost\"),\n"
+    "      database: System.get_env(\"DB_NAME\", \"app_dev\"),\n"
+    "      username: System.get_env(\"DB_USER\", \"postgres\"),\n"
+    "      password: System.get_env(\"DB_PASS\", \"\"),\n"
+    "      pool_size: 10\n"
+    "    }\n"
+    "  end\n"
+    "\n"
+    "  def port()\n"
+    "    System.get_env(\"PORT\", \"4000\")\n"
+    "  end\n"
+    "end\n".
+
+scaffold_seeds() ->
+    "module Seeds\n"
+    "  def run()\n"
+    "    IO.puts(\"Seeding database...\")\n"
+    "  end\n"
+    "end\n".
+
+scaffold_env_example() ->
+    "# Database\n"
+    "DB_HOST=localhost\n"
+    "DB_NAME=app_dev\n"
+    "DB_USER=postgres\n"
+    "DB_PASS=\n"
+    "\n"
+    "# Server\n"
+    "PORT=4000\n"
+    "\n"
+    "# Auth\n"
+    "JWT_SECRET=change_me_in_production\n".
+
+scaffold_readme(AppName) ->
+    io_lib:format(
+        "# ~s\n"
+        "\n"
+        "A [Winn](https://winn.ws) project.\n"
+        "\n"
+        "## Getting Started\n"
+        "\n"
+        "```sh\n"
+        "winn run src/~s.winn\n"
+        "```\n"
+        "\n"
+        "## Tests\n"
+        "\n"
+        "```sh\n"
+        "winn test\n"
+        "```\n"
+        "\n"
+        "## Project Structure\n"
+        "\n"
+        "```\n"
+        "src/              Application source\n"
+        "  models/         Data models and schemas\n"
+        "  controllers/    Request handlers\n"
+        "  tasks/          Background tasks\n"
+        "test/             Tests\n"
+        "config/           Configuration\n"
+        "db/migrations/    Database migrations\n"
+        "```\n", [AppName, filename:basename(AppName)]).
+
+scaffold_rebar(AppName) ->
     io_lib:format(
         "{erl_opts, [debug_info]}.\n\n{deps, []}.\n\n"
         "{escript_main_app, ~s}.\n"
         "{escript_name, ~s}.\n",
-        [AppName, AppName]
-    ).
+        [AppName, AppName]).
 
-gitignore_content() ->
-    "_build/\nebin/\n*.beam\n_packages/\n".
+scaffold_gitignore() ->
+    "_build/\n"
+    "ebin/\n"
+    "*.beam\n"
+    "_packages/\n"
+    ".env\n"
+    "*.swp\n"
+    "*~\n"
+    ".DS_Store\n".
 
-starter_package_json(AppName) ->
-    BaseName = filename:basename(AppName),
+scaffold_package_json(BaseName) ->
     io_lib:format(
         "{\n"
         "  \"name\": \"~s\",\n"
         "  \"version\": \"0.1.0\",\n"
         "  \"packages\": {}\n"
-        "}\n",
-        [BaseName]).
+        "}\n", [BaseName]).
 
 %% ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -733,6 +947,101 @@ find_doc_files([]) ->
 find_doc_files(Paths) ->
     lists:filter(fun filelib:is_file/1, Paths).
 
+%% ── Formatter ───────────────────────────────────────────────────────────
+
+run_fmt([]) ->
+    Files = find_winn_files(),
+    case Files of
+        [] ->
+            io:format("No .winn files found in src/ or current directory.~n"),
+            halt(0);
+        _ ->
+            lists:foreach(fun(F) ->
+                case winn_formatter:format_file(F) of
+                    {ok, Formatted} ->
+                        file:write_file(F, Formatted),
+                        io:format("  formatted  ~s~n", [F]);
+                    {error, Reason} ->
+                        io:format("  error      ~s: ~p~n", [F, Reason])
+                end
+            end, Files),
+            halt(0)
+    end;
+run_fmt(Files) ->
+    lists:foreach(fun(F) ->
+        case winn_formatter:format_file(F) of
+            {ok, Formatted} ->
+                file:write_file(F, Formatted),
+                io:format("  formatted  ~s~n", [F]);
+            {error, Reason} ->
+                io:format("  error      ~s: ~p~n", [F, Reason])
+        end
+    end, Files),
+    halt(0).
+
+run_fmt_check([]) ->
+    run_fmt_check(find_winn_files());
+run_fmt_check(Files) ->
+    Changed = lists:filtermap(fun(F) ->
+        case winn_formatter:check_file(F) of
+            ok -> false;
+            {changed, _} ->
+                io:format("  unformatted  ~s~n", [F]),
+                {true, F}
+        end
+    end, Files),
+    case Changed of
+        [] ->
+            io:format("All files formatted.~n"),
+            halt(0);
+        _ ->
+            io:format("~B file(s) need formatting. Run `winn fmt` to fix.~n", [length(Changed)]),
+            halt(1)
+    end.
+
+find_winn_files() ->
+    SrcFiles = filelib:wildcard("src/*.winn"),
+    case SrcFiles of
+        [] -> filelib:wildcard("*.winn");
+        _  -> SrcFiles
+    end.
+
+%% ── Lint ────────────────────────────────────────────────────────────────
+
+run_lint([]) ->
+    Files = find_winn_files(),
+    case Files of
+        [] ->
+            io:format("No .winn files found in src/ or current directory.~n"),
+            halt(0);
+        _ ->
+            run_lint(Files)
+    end;
+run_lint(Files) ->
+    AllViolations = lists:flatmap(fun(F) ->
+        case winn_lint:check_file(F) of
+            {ok, []} ->
+                [];
+            {ok, Violations} ->
+                {ok, Bin} = file:read_file(F),
+                Source = binary_to_list(Bin),
+                Formatted = winn_errors:format_diagnostics(Violations, Source, F),
+                io:put_chars(standard_error, Formatted),
+                Violations;
+            {error, Reason} ->
+                io:format(standard_error, "  error  ~s: ~p~n", [F, Reason]),
+                [Reason]
+        end
+    end, Files),
+    case AllViolations of
+        [] ->
+            io:format("No lint warnings.~n"),
+            halt(0);
+        _ ->
+            io:format(standard_error, "~B warning(s) found.~n", [length(AllViolations)]),
+            halt(1)
+    end.
+
 %% ── Deps subcommand ─────────────────────────────────────────────────────
 
 run_deps(["list"])              -> winn_deps:list();
@@ -776,35 +1085,35 @@ print_version() ->
 print_usage() ->
     io:format(
         "Winn ~s - a compiled language on the BEAM~n~n"
-        "Usage:~n"
-        "  winn new <name>         Create a new Winn project~n"
-        "  winn compile            Compile all .winn files (src/ or current dir)~n"
-        "  winn compile <file>     Compile a single .winn file~n"
-        "  winn run <file>         Compile and run a single .winn file~n"
-        "  winn start              Compile project and start (keeps VM alive)~n"
-        "  winn start <module>     Start with a specific module~n"
-        "  winn test               Run all tests in test/~n"
-        "  winn test <file>        Run a specific test file~n"
-        "  winn docs               Generate API docs with dependency graph~n"
-        "  winn docs <file>        Generate docs for a single file~n"
-        "  winn watch              Watch files and hot-reload with live dashboard~n"
-        "  winn watch --start      Watch + start the app~n"
-        "  winn task <name>        Run a project task (e.g., winn task db:seed)~n"
-        "  winn bench <file>       Run load tests~n"
-        "  winn metrics            Live metrics dashboard~n"
-        "  winn release            Build a production release~n"
-        "  winn release --docker   Generate a Dockerfile~n"
-        "  winn add <package>      Install a Winn package~n"
-        "  winn remove <package>   Remove a package~n"
-        "  winn packages           List installed packages~n"
-        "  winn install            Install all packages from package.json~n"
-        "  winn create <type>      Generate code (model, migration, task, router, scaffold)~n"
-        "  winn c <type>           Shorthand for winn create~n"
-        "  winn migrate            Run pending database migrations~n"
-        "  winn rollback           Rollback last database migration~n"
-        "  winn deps               Manage dependencies~n"
-        "  winn console            Interactive console~n"
-        "  winn version            Show version~n"
-        "  winn help               Show this help text~n",
+        "Development:~n"
+        "  new <name> [flags]  Create a new project (--api, --minimal)~n"
+        "  r, run <file>       Compile and run a file~n"
+        "  s, start [module]   Start project (keeps VM alive)~n"
+        "  t, test [file]      Run tests~n"
+        "  w, watch [--start]  Watch + hot-reload~n"
+        "  con, console        Interactive REPL~n~n"
+        "Code Quality:~n"
+        "  c, compile [file]   Compile .winn files~n"
+        "  f, fmt [file]       Format code (--check for CI)~n"
+        "  l, lint [file]      Static analysis~n"
+        "  d, docs [file]      Generate API docs~n"
+        "  lsp                 Start language server (stdio)~n~n"
+        "Generators:~n"
+        "  g, create <type>    Generate code (model, migration, ...)~n"
+        "  task <name>         Run a project task~n"
+        "  migrate             Run pending migrations~n"
+        "  rollback            Rollback last migration~n~n"
+        "Packages:~n"
+        "  add <pkg>           Install a package~n"
+        "  remove <pkg>        Remove a package~n"
+        "  packages            List installed~n"
+        "  install             Install all from package.json~n"
+        "  deps                Manage Erlang dependencies~n~n"
+        "Production:~n"
+        "  bench <file>        Load testing~n"
+        "  metrics             Live metrics dashboard~n"
+        "  release [--docker]  Build production release~n~n"
+        "  -v, version         Show version~n"
+        "  -h, help            Show this help~n",
         [get_version()]
     ).

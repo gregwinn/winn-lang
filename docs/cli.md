@@ -8,30 +8,32 @@ brew tap gregwinn/winn && brew install winn
 
 ## Quick Reference
 
-| Command | Description |
-|---------|-------------|
-| [`winn new <name>`](#winn-new) | Create a new project |
-| [`winn compile [file]`](#winn-compile) | Compile `.winn` files to `.beam` |
-| [`winn run <file>`](#winn-run) | Compile and run a single file |
-| [`winn start [module]`](#winn-start) | Start project (keeps VM alive) |
-| [`winn test [file]`](#winn-test) | Run tests |
-| [`winn watch [--start]`](#winn-watch) | Hot-reload with live dashboard |
-| [`winn create <type>`](#winn-create) | Generate code (model, migration, task, router, scaffold) |
-| [`winn c <type>`](#winn-create) | Shorthand for create |
-| [`winn migrate`](#winn-migrate) | Run database migrations |
-| [`winn rollback`](#winn-rollback) | Rollback migrations |
-| [`winn task <name>`](#winn-task) | Run a project task |
-| [`winn add <package>`](#winn-add) | Install a package |
-| [`winn remove <package>`](#winn-remove) | Remove a package |
-| [`winn packages`](#winn-packages) | List installed packages |
-| [`winn install`](#winn-install) | Install all from package.json |
-| [`winn docs [file]`](#winn-docs) | Generate API docs with Mermaid graph |
-| [`winn bench <file>`](#winn-bench) | Run load tests |
-| [`winn metrics`](#winn-metrics) | Live metrics dashboard |
-| [`winn release`](#winn-release) | Build production release |
-| [`winn deps`](#winn-deps) | Manage Erlang dependencies |
-| [`winn console`](#winn-console) | Interactive REPL |
-| [`winn version`](#winn-version) | Print version |
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| [`winn new <name>`](#winn-new) | | Create a new project |
+| [`winn run <file>`](#winn-run) | `r` | Compile and run a file |
+| [`winn start [module]`](#winn-start) | `s` | Start project (keeps VM alive) |
+| [`winn test [file]`](#winn-test) | `t` | Run tests |
+| [`winn watch [--start]`](#winn-watch) | `w` | Watch + hot-reload |
+| [`winn console`](#winn-console) | `con` | Interactive REPL |
+| [`winn compile [file]`](#winn-compile) | `c` | Compile `.winn` files |
+| [`winn fmt [file]`](#winn-fmt) | `f` | Format code (`--check` for CI) |
+| [`winn lint [file]`](#winn-lint) | `l` | Static analysis linter |
+| [`winn docs [file]`](#winn-docs) | `d` | Generate API docs |
+| [`winn create <type>`](#winn-create) | `g` | Generate code (model, migration, ...) |
+| [`winn migrate`](#winn-migrate) | | Run database migrations |
+| [`winn rollback`](#winn-rollback) | | Rollback migrations |
+| [`winn task <name>`](#winn-task) | | Run a project task |
+| [`winn add <package>`](#winn-add) | | Install a package |
+| [`winn remove <package>`](#winn-remove) | | Remove a package |
+| [`winn packages`](#winn-packages) | | List installed packages |
+| [`winn install`](#winn-install) | | Install all from package.json |
+| [`winn deps`](#winn-deps) | | Manage Erlang dependencies |
+| [`winn bench <file>`](#winn-bench) | | Load testing |
+| [`winn metrics`](#winn-metrics) | | Live metrics dashboard |
+| [`winn release`](#winn-release) | | Build production release |
+| [`winn version`](#winn-version) | `-v` | Print version |
+| `winn help` | `-h` | Show help |
 
 ---
 
@@ -116,18 +118,27 @@ Generate code from templates. `winn c` is shorthand.
 
 ```sh
 winn create model User name:string email:string
+# => src/models/user.winn
+
 winn create migration CreateUsers name:string
+# => db/migrations/TIMESTAMP_create_users.winn
+
 winn create task db:seed
+# => src/tasks/db_seed.winn
+
 winn create router Api
+# => src/controllers/api_controller.winn  (module ApiController)
+
 winn create scaffold Post title:string body:text
+# => src/models/post.winn, src/controllers/post_controller.winn, test/post_test.winn
 ```
 
-Scaffold generates model + CRUD router + test file.
+Scaffold generates model + CRUD controller + test file.
 
 <a id="winn-migrate"></a>
 ### `winn migrate`
 
-Run pending database migrations from `migrations/*.winn`.
+Run pending database migrations from `db/migrations/*.winn`.
 
 ```sh
 winn migrate              # run all pending
@@ -155,7 +166,7 @@ winn task db:seed
 winn task db:migrate
 ```
 
-Tasks are modules with `use Winn.Task` and a `run/1` function in `tasks/` or `src/`.
+Tasks are modules with `use Winn.Task` and a `run/1` function in `src/tasks/`.
 
 <a id="winn-add"></a>
 ### `winn add <package>`
@@ -193,6 +204,44 @@ Install all packages from `package.json`.
 | [winn-redis](https://github.com/gregwinn/winn-redis) | `winn add redis` | Redis client |
 | [winn-mongodb](https://github.com/gregwinn/winn-mongodb) | `winn add mongodb` | MongoDB client |
 | [winn-amqp](https://github.com/gregwinn/winn-amqp) | `winn add amqp` | RabbitMQ/AMQP client |
+
+<a id="winn-fmt"></a>
+### `winn fmt [file]`
+
+Format Winn source files for consistent code style.
+
+```sh
+winn fmt                   # format all .winn files in src/ (or current dir)
+winn fmt src/app.winn      # format a specific file
+winn fmt --check           # check formatting without modifying (exits 1 if unformatted)
+```
+
+<a id="winn-lint"></a>
+### `winn lint [file]`
+
+Run static analysis on Winn source files.
+
+```sh
+winn lint                  # lint all .winn files in src/ (or current dir)
+winn lint src/app.winn     # lint a specific file
+```
+
+**Rules checked:**
+
+| Rule | Category | Description |
+|------|----------|-------------|
+| `unused_variable` | Correctness | Variable assigned but never referenced (prefix with `_` to ignore) |
+| `unused_import` | Correctness | Import directive with no calls to that module |
+| `unused_alias` | Correctness | Alias directive with no calls using that alias |
+| `function_name_convention` | Style | Function names must be `snake_case` (trailing `?` allowed) |
+| `module_name_convention` | Style | Module names must be PascalCase |
+| `redundant_boolean` | Simplification | `x == true` can be simplified to `x` |
+| `empty_function_body` | Correctness | Function with no body returns `nil` silently |
+| `pipe_into_literal` | Correctness | Pipe `\|>` into a non-callable value |
+| `single_pipe` | Style | Single `\|>` with no chain — consider a regular call |
+| `large_function` | Complexity | Function body exceeds 50 expressions |
+
+Exits with code 0 if no warnings, code 1 if warnings found.
 
 <a id="winn-docs"></a>
 ### `winn docs [file]`

@@ -1,11 +1,16 @@
 %% winn_codegen.erl
 %% Translates the lowered Winn AST into Core Erlang using the cerl module.
 %%
-%% Phase 1: modules, functions, calls, literals, pipes (desugared by transform).
-%% Phase 2: pattern matching, case expressions, multi-clause functions.
+%% Orchestrates code generation across submodules:
+%%   winn_codegen_resolve  — module name resolution (resolve_dot_call)
+%%   winn_codegen_pattern  — pattern and parameter generation
 
 -module(winn_codegen).
 -export([gen/1]).
+
+-import(winn_codegen_resolve, [resolve_dot_call/2, resolve_atom/1,
+                               winn_module_atom/1, fn_atom/1, var_atom/1]).
+-import(winn_codegen_pattern, [gen_pattern/1, gen_param/1]).
 
 %% Generate Core Erlang for a list of top-level forms.
 gen(Forms) ->
@@ -52,14 +57,10 @@ gen_function({function, _Line, Name, Params, Body}) ->
     BodyExpr  = gen_body(Body),
     {FVar, cerl:c_fun(ParamVars, BodyExpr)}.
 
-%% Generate a Core Erlang variable for a function parameter.
-%% After Phase 2 transform, params are always simple variables.
-gen_param({var, _, Name})        -> cerl:c_var(var_atom(Name));
-gen_param({pat_wildcard, _})     -> cerl:c_var('_');
-gen_param({pat_var, _, Name})    -> cerl:c_var(var_atom(Name)).  %% defensive
-
-%% Sequence of expressions; last one is the return value.
+%% ── Body (expression sequence) ───────────────────────────────────────────
+%% Last expression is the return value.
 %% Assignments scope over the rest of the body via let bindings.
+
 gen_body([]) ->
     cerl:c_atom(nil);
 gen_body([Single]) ->
@@ -67,11 +68,11 @@ gen_body([Single]) ->
 gen_body([{assign, _Line, {var, _, VName}, Expr} | Rest]) ->
     Var = cerl:c_var(var_atom(VName)),
     cerl:c_let([Var], gen_expr(Expr), gen_body(Rest));
-gen_body([{pat_assign_case, _Line, Pat, CaseExpr} | Rest]) ->
+gen_body([{pat_assign_case, _Line, _Pat, CaseExpr} | Rest]) ->
     %% Pattern assignment: bind the matched value, then continue with
     %% the pattern variables in scope via the case clause.
     %% We generate: case Expr of Pat -> <rest of body> end
-    {case_expr, _, Scrutinee, [{case_clause, CLine, Pats, Guard, _Body}]} = CaseExpr,
+    {case_expr, _, Scrutinee, [{case_clause, _CLine, Pats, Guard, _Body}]} = CaseExpr,
     CerlScrutinee = gen_expr(Scrutinee),
     CerlPats = [gen_pattern(P) || P <- Pats],
     CerlGuard = case Guard of
@@ -172,15 +173,11 @@ gen_expr({block, _Line, Params, Body}) ->
 %% try/rescue expression (L4)
 gen_expr({try_expr, _Line, Body, RescueClauses}) ->
     CerlBody = gen_body(Body),
-    %% Bind the success value to a fresh variable and return it.
     SuccessVar = cerl:c_var('_try_val'),
-    %% Build catch clauses from rescue clauses.
-    %% Erlang try/catch receives {Class, Reason, Stacktrace}.
     ExcClass = cerl:c_var('_exc_class'),
     ExcVal   = cerl:c_var('_exc_val'),
     ExcTrace = cerl:c_var('_exc_trace'),
     CatchClauses = [gen_rescue_clause(RC) || RC <- RescueClauses],
-    %% Add a catch-all rethrow clause at the end.
     RethrowPat   = cerl:c_tuple([ExcClass, ExcVal, ExcTrace]),
     RethrowBody  = cerl:c_primop(
         cerl:c_atom(raise),
@@ -220,9 +217,6 @@ gen_case_clause({case_clause, _Line, Patterns, Guard, Body}) ->
     cerl:c_clause(CerlPats, CerlGuard, CerlBody).
 
 %% ── Rescue clauses (try/rescue) ──────────────────────────────────────────
-%%
-%% Each rescue clause pattern matches the catch tuple {Class, Reason, Trace}.
-%% We match on the Reason component; Class defaults to 'throw'.
 
 gen_rescue_clause({rescue_clause, _Line, Pat, Body}) ->
     ExcClass = cerl:c_var('_exc_class'),
@@ -230,39 +224,6 @@ gen_rescue_clause({rescue_clause, _Line, Pat, Body}) ->
     CerlPat  = cerl:c_tuple([ExcClass, gen_pattern(Pat), ExcTrace]),
     CerlBody = gen_body(Body),
     cerl:c_clause([CerlPat], cerl:c_atom(true), CerlBody).
-
-%% ── Patterns ───────────────────────────────────────────────────────────────
-%%
-%% gen_pattern/1 produces cerl pattern nodes (not expressions).
-%% These can only appear in case clause pattern positions.
-
-gen_pattern({var, _Line, Name}) ->
-    cerl:c_var(var_atom(Name));
-
-gen_pattern({pat_var, _Line, Name}) ->
-    cerl:c_var(var_atom(Name));
-
-gen_pattern({pat_wildcard, _Line}) ->
-    cerl:c_var('_');
-
-gen_pattern({pat_atom, _Line, Value}) ->
-    cerl:c_atom(Value);
-
-gen_pattern({pat_integer, _Line, Value}) ->
-    cerl:c_int(Value);
-
-gen_pattern({pat_tuple, _Line, Elements}) ->
-    cerl:c_tuple([gen_pattern(E) || E <- Elements]);
-
-gen_pattern({pat_list, _Line, [], nil}) ->
-    cerl:c_nil();
-gen_pattern({pat_list, _Line, [], TailPat}) ->
-    gen_pattern(TailPat);
-gen_pattern({pat_list, _Line, [H | T], Tail}) ->
-    cerl:c_cons(gen_pattern(H), gen_pattern({pat_list, 0, T, Tail}));
-
-gen_pattern(Unknown) ->
-    error({unsupported_pattern_node, Unknown}).
 
 %% ── Binary operators ───────────────────────────────────────────────────────
 
@@ -279,7 +240,7 @@ gen_op('>=',  L, R) -> cerl:c_call(cerl:c_atom(erlang), cerl:c_atom('>='),  [L, 
 gen_op('and', L, R) -> cerl:c_call(cerl:c_atom(erlang), cerl:c_atom('and'), [L, R]);
 gen_op('or',  L, R) -> cerl:c_call(cerl:c_atom(erlang), cerl:c_atom('or'),  [L, R]);
 gen_op('<>',  L, R) ->
-    %% Binary concatenation via erlang:binary_part trick — use list_to_binary
+    %% Binary concatenation
     cerl:c_call(cerl:c_atom(erlang), cerl:c_atom('binary_part'),
         [cerl:c_call(cerl:c_atom(erlang), cerl:c_atom('list_to_binary'),
             [cerl:c_cons(L, cerl:c_cons(R, cerl:c_nil()))]),
@@ -287,77 +248,3 @@ gen_op('<>',  L, R) ->
          cerl:c_call(cerl:c_atom(erlang), cerl:c_atom('+'),
             [cerl:c_call(cerl:c_atom(erlang), cerl:c_atom('byte_size'), [L]),
              cerl:c_call(cerl:c_atom(erlang), cerl:c_atom('byte_size'), [R])])]).
-
-%% ── Module/function name resolution ───────────────────────────────────────
-
-resolve_dot_call('IO', Fun) ->
-    {winn_runtime, list_to_atom("io." ++ atom_to_list(Fun))};
-resolve_dot_call('String', Fun) ->
-    {winn_runtime, list_to_atom("string." ++ atom_to_list(Fun))};
-resolve_dot_call('Enum', Fun) ->
-    {winn_runtime, list_to_atom("enum." ++ atom_to_list(Fun))};
-resolve_dot_call('Map', Fun) ->
-    {winn_runtime, list_to_atom("map." ++ atom_to_list(Fun))};
-resolve_dot_call('List', Fun) ->
-    {winn_runtime, list_to_atom("list." ++ atom_to_list(Fun))};
-resolve_dot_call('GenServer', Fun) -> {gen_server, Fun};
-resolve_dot_call('Supervisor', Fun) -> {supervisor, Fun};
-resolve_dot_call('Repo', Fun)       -> {winn_repo, Fun};
-resolve_dot_call('Changeset', Fun)  -> {winn_changeset, Fun};
-resolve_dot_call('System', Fun) ->
-    {winn_runtime, list_to_atom("system." ++ atom_to_list(Fun))};
-resolve_dot_call('UUID', Fun) ->
-    {winn_runtime, list_to_atom("uuid." ++ atom_to_list(Fun))};
-resolve_dot_call('DateTime', Fun) ->
-    {winn_runtime, list_to_atom("datetime." ++ atom_to_list(Fun))};
-resolve_dot_call('Logger', Fun)  -> {winn_logger, Fun};
-resolve_dot_call('Crypto', Fun)  -> {winn_crypto, Fun};
-resolve_dot_call('HTTP', Fun)    -> {winn_http, Fun};
-resolve_dot_call('Config', Fun)  -> {winn_config, Fun};
-resolve_dot_call('Task', Fun)    -> {winn_task, Fun};
-resolve_dot_call('JWT', Fun)     -> {winn_jwt, Fun};
-resolve_dot_call('WS', Fun)      -> {winn_ws, Fun};
-resolve_dot_call('Server', Fun)  -> {winn_server, Fun};
-resolve_dot_call('JSON', Fun)    -> {winn_json, Fun};
-resolve_dot_call('Winn', Fun)    -> {winn_runtime, Fun};
-resolve_dot_call('Retry', Fun)    -> {winn_retry, Fun};
-resolve_dot_call('Timer', Fun)    -> {winn_timer, Fun};
-resolve_dot_call('File', Fun)     -> {winn_file, Fun};
-resolve_dot_call('Regex', Fun) -> {winn_regex, Fun};
-resolve_dot_call('Protocol', Fun) -> {winn_protocol, Fun};
-resolve_dot_call('Health', Fun)   -> {winn_health, Fun};
-resolve_dot_call('Metrics', Fun)  -> {winn_metrics, Fun};
-resolve_dot_call('Agent', Fun)    -> {winn_agent, Fun};
-resolve_dot_call('ReplBindings', get) -> {winn_repl, get_binding};
-resolve_dot_call(Mod, Fun) ->
-    ErlMod = list_to_atom(string:lowercase(atom_to_list(Mod))),
-    {ErlMod, Fun}.
-
-%% ── Name helpers ───────────────────────────────────────────────────────────
-
-winn_module_atom(Name) when is_atom(Name) ->
-    list_to_atom(string:lowercase(atom_to_list(Name))).
-
-fn_atom(Name) when is_atom(Name) -> Name.
-
-%% Module name references (PascalCase) used as values are lowercased
-%% to match compiled module names: Post -> post.
-%% Regular atoms (:ok, :error, etc.) are left as-is.
-resolve_atom(V) when is_atom(V) ->
-    Str = atom_to_list(V),
-    case Str of
-        [C | _] when C >= $A, C =< $Z ->
-            list_to_atom(string:lowercase(Str));
-        _ ->
-            V
-    end.
-
-%% Capitalise the first letter of a variable name for Core Erlang convention.
-%% Only lowercase ASCII letters are capitalised; _ and uppercase are left alone.
-var_atom(Name) when is_atom(Name) ->
-    case atom_to_list(Name) of
-        [C | Rest] when C >= $a, C =< $z ->
-            list_to_atom([(C - 32) | Rest]);
-        Chars ->
-            list_to_atom(Chars)
-    end.

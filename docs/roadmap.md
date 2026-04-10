@@ -26,10 +26,14 @@ Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syn
 
 | Issue | Feature | Description |
 |-------|---------|-------------|
-| [#52](https://github.com/gregwinn/winn-lang/issues/52) | Formatter | `winn fmt` for consistent code style |
-| [#53](https://github.com/gregwinn/winn-lang/issues/53) | Linter | `winn lint` for static analysis |
-| [#54](https://github.com/gregwinn/winn-lang/issues/54) | Scaffold | Improved `winn new` with test/, config/ |
-| [#55](https://github.com/gregwinn/winn-lang/issues/55) | LSP | Language server for IDE integration |
+| [#52](https://github.com/gregwinn/winn-lang/issues/52) | ~~Formatter~~ | ~~`winn fmt` for consistent code style~~ **done** |
+| [#53](https://github.com/gregwinn/winn-lang/issues/53) | ~~Linter~~ | ~~`winn lint` for static analysis~~ **done** |
+| [#54](https://github.com/gregwinn/winn-lang/issues/54) | ~~Scaffold~~ | ~~Improved `winn new` with test/, config/~~ **done** |
+| [#114](https://github.com/gregwinn/winn-lang/issues/114) | ~~Generator dirs~~ | ~~Rails-style subdirectories~~ **done** |
+| [#117](https://github.com/gregwinn/winn-lang/issues/117) | Lint config | Configurable lint rules via `.winn-lint.json` |
+| [#118](https://github.com/gregwinn/winn-lang/issues/118) | LSP Phase 1 | Diagnostics — compile errors + lint warnings in editor |
+| [#119](https://github.com/gregwinn/winn-lang/issues/119) | LSP Phase 2 | Navigation — go-to-definition, hover, document symbols |
+| [#120](https://github.com/gregwinn/winn-lang/issues/120) | LSP Phase 3 | Completion, find references, formatting integration |
 | [#99](https://github.com/gregwinn/winn-lang/issues/99) | Codegen split | Split `winn_codegen.erl` into focused submodules |
 
 ### v0.10.0 — Hardening
