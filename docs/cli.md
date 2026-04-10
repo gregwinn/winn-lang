@@ -3,7 +3,21 @@
 ## Install
 
 ```sh
+# macOS
 brew tap gregwinn/winn && brew install winn
+
+# Linux (curl)
+curl -fsSL https://winn.ws/install.sh | bash
+
+# Ubuntu / Debian
+curl -fsSL https://winn.ws/gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/winn.gpg
+echo "deb [signed-by=/usr/share/keyrings/winn.gpg] https://gregwinn.github.io/apt.winn.ws stable main" \
+  | sudo tee /etc/apt/sources.list.d/winn.list
+sudo apt update && sudo apt install winn
+
+# Fedora / RHEL
+sudo dnf config-manager --add-repo https://gregwinn.github.io/rpm.winn.ws/winn.repo
+sudo dnf install winn
 ```
 
 ## Quick Reference
