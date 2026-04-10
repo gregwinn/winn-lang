@@ -39,3 +39,140 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: _build/default/bin/winn
+
+  build-linux-packages:
+    runs-on: ubuntu-latest
+    needs: upload-binary
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Erlang/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27'
+          rebar3-version: '3.24'
+
+      - name: Restore rebar3 cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            _build
+            ~/.cache/rebar3
+          key: ${{ runner.os }}-rebar3-27-${{ hashFiles('rebar.lock', 'rebar.config', 'apps/**/*.yrl', 'apps/**/*.xrl') }}
+          restore-keys: |
+            ${{ runner.os }}-rebar3-27-
+
+      - name: Build escript
+        run: rebar3 get-deps && rebar3 escriptize
+
+      - name: Install nfpm
+        run: |
+          curl -sfL https://github.com/goreleaser/nfpm/releases/download/v2.41.1/nfpm_2.41.1_linux_amd64.tar.gz | tar xz -C /usr/local/bin nfpm
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Import GPG key
+        if: env.GPG_PRIVATE_KEY != ''
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format long | grep sec | head -1 | awk '{print $2}' | cut -d'/' -f2)
+          gpg --batch --export-secret-keys --armor "$GPG_KEY_ID" > /tmp/gpg-key.asc
+          echo "GPG_KEY_FILE=/tmp/gpg-key.asc" >> "$GITHUB_ENV"
+
+      - name: Set empty GPG key file if no secret
+        if: env.GPG_PRIVATE_KEY == ''
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: echo "GPG_KEY_FILE=" >> "$GITHUB_ENV"
+
+      - name: Build .deb package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          nfpm package --packager deb --target winn_${VERSION}_amd64.deb
+
+      - name: Build .rpm package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          nfpm package --packager rpm --target winn-${VERSION}-1.x86_64.rpm
+
+      - name: Upload packages to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            winn_*.deb
+            winn-*.rpm
+
+  update-apt-repo:
+    runs-on: ubuntu-latest
+    needs: build-linux-packages
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download .deb from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release download "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "*.deb" \
+            --dir ./packages
+
+      - name: Checkout apt repo
+        uses: actions/checkout@v4
+        with:
+          repository: gregwinn/apt.winn.ws
+          token: ${{ secrets.REPO_TOKEN }}
+          path: apt-repo
+          fetch-depth: 0
+
+      - name: Install apt repo tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+
+      - name: Update apt repository
+        run: |
+          mkdir -p apt-repo/pool/main
+          cp packages/*.deb apt-repo/pool/main/
+          cd apt-repo
+          mkdir -p dists/stable/main/binary-amd64
+          dpkg-scanpackages pool/ /dev/null > dists/stable/main/binary-amd64/Packages
+          gzip -k dists/stable/main/binary-amd64/Packages
+          cat > dists/stable/Release <<EOF
+          Origin: Winn
+          Label: Winn
+          Suite: stable
+          Codename: stable
+          Architectures: amd64
+          Components: main
+          Description: Winn programming language packages
+          EOF
+          apt-ftparchive release dists/stable >> dists/stable/Release
+
+      - name: Import GPG key for signing
+        if: env.GPG_PRIVATE_KEY != ''
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          cd apt-repo
+          gpg --batch --yes --armor --detach-sign --output dists/stable/Release.gpg dists/stable/Release
+          gpg --batch --yes --clearsign --output dists/stable/InRelease dists/stable/Release
+
+      - name: Commit and push apt repo
+        run: |
+          cd apt-repo
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Update packages for $GITHUB_REF_NAME"
+          git push
