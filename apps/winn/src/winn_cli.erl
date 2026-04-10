@@ -110,6 +110,9 @@ main(Args) ->
                 {error, _} -> halt(1)
             end;
 
+        lsp ->
+            winn_lsp:start();
+
         version ->
             print_version(),
             halt(0);
@@ -175,6 +178,7 @@ parse_args(["lint"])                 -> {lint, []};
 parse_args(["lint" | Args])         -> {lint, Args};
 parse_args(["l"])                   -> {lint, []};
 parse_args(["l" | Args])           -> {lint, Args};
+parse_args(["lsp" | _])            -> lsp;
 parse_args(["deps" | Sub])         -> {deps, Sub};
 parse_args(["version" | _])        -> version;
 parse_args(["-v" | _])             -> version;
@@ -1092,7 +1096,8 @@ print_usage() ->
         "  c, compile [file]   Compile .winn files~n"
         "  f, fmt [file]       Format code (--check for CI)~n"
         "  l, lint [file]      Static analysis~n"
-        "  d, docs [file]      Generate API docs~n~n"
+        "  d, docs [file]      Generate API docs~n"
+        "  lsp                 Start language server (stdio)~n~n"
         "Generators:~n"
         "  g, create <type>    Generate code (model, migration, ...)~n"
         "  task <name>         Run a project task~n"
