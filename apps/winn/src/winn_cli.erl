@@ -9,15 +9,20 @@
 main(Args) ->
     winn_errors:set_color(is_tty()),
     case parse_args(Args) of
-        {new, Name} ->
-            case scaffold(Name) of
+        {new, Name, Opts} ->
+            case scaffold(Name, Opts) of
                 ok ->
-                    io:format("Created project ~s~n", [Name]),
+                    io:format("Created project ~s~n~n", [Name]),
+                    io:format("  cd ~s~n  winn run src/~s.winn~n~n", [Name, filename:basename(Name)]),
                     halt(0);
                 {error, Reason} ->
                     io:format("Error creating project: ~p~n", [Reason]),
                     halt(1)
             end;
+
+        {new_usage} ->
+            io:format("Usage: winn new <name> [--api | --minimal]~n"),
+            halt(1);
 
         {compile, []} ->
             compile_all();
@@ -120,7 +125,8 @@ main(Args) ->
 
 %% ── Argument parsing ──────────────────────────────────────────────────────
 
-parse_args(["new", Name])          -> {new, Name};
+parse_args(["new", Name | Flags])   -> {new, Name, parse_new_flags(Flags)};
+parse_args(["new"])                 -> {new_usage};
 parse_args(["compile"])            -> {compile, []};
 parse_args(["compile", File])      -> {compile, [File]};
 parse_args(["c"])                  -> {compile, []};
@@ -278,28 +284,60 @@ start_project(Args) ->
 
 %% ── Scaffold ──────────────────────────────────────────────────────────────
 
-scaffold(AppName) ->
+parse_new_flags(Flags) ->
+    lists:foldl(fun("--api", Acc)     -> Acc#{mode => api};
+                   ("--minimal", Acc) -> Acc#{mode => minimal};
+                   (_, Acc)           -> Acc
+                end, #{mode => default}, Flags).
+
+scaffold(AppName, Opts) ->
     BaseName = filename:basename(AppName),
-    SrcDir = AppName ++ "/src",
-    WinnFile = SrcDir ++ "/" ++ BaseName ++ ".winn",
-    RebarFile = AppName ++ "/rebar.config",
-    GitignoreFile = AppName ++ "/.gitignore",
-    PackageFile = AppName ++ "/package.json",
-    SeedsFile = AppName ++ "/db/seeds.winn",
+    Mode = maps:get(mode, Opts, default),
     try
         ok = file:make_dir(AppName),
-        ok = file:make_dir(SrcDir),
-        ok = filelib:ensure_path(AppName ++ "/src/models"),
-        ok = filelib:ensure_path(AppName ++ "/src/controllers"),
-        ok = filelib:ensure_path(AppName ++ "/src/tasks"),
-        ok = filelib:ensure_path(AppName ++ "/test"),
-        ok = filelib:ensure_path(AppName ++ "/db/migrations"),
-        ok = filelib:ensure_path(AppName ++ "/config"),
-        ok = file:write_file(WinnFile, starter_winn(AppName)),
-        ok = file:write_file(RebarFile, starter_rebar(AppName)),
-        ok = file:write_file(GitignoreFile, gitignore_content()),
-        ok = file:write_file(PackageFile, starter_package_json(AppName)),
-        ok = file:write_file(SeedsFile, seeds_content()),
+        ok = filelib:ensure_path(AppName ++ "/src"),
+        ok = file:write_file(AppName ++ "/rebar.config", scaffold_rebar(AppName)),
+        ok = file:write_file(AppName ++ "/.gitignore", scaffold_gitignore()),
+        ok = file:write_file(AppName ++ "/package.json", scaffold_package_json(BaseName)),
+        case Mode of
+            minimal ->
+                ok = file:write_file(AppName ++ "/src/" ++ BaseName ++ ".winn",
+                                     scaffold_winn_minimal(AppName));
+            api ->
+                ok = filelib:ensure_path(AppName ++ "/src/models"),
+                ok = filelib:ensure_path(AppName ++ "/src/controllers"),
+                ok = filelib:ensure_path(AppName ++ "/src/tasks"),
+                ok = filelib:ensure_path(AppName ++ "/test"),
+                ok = filelib:ensure_path(AppName ++ "/db/migrations"),
+                ok = filelib:ensure_path(AppName ++ "/config"),
+                ok = file:write_file(AppName ++ "/src/" ++ BaseName ++ ".winn",
+                                     scaffold_winn_api(AppName)),
+                ok = file:write_file(AppName ++ "/src/controllers/health_controller.winn",
+                                     scaffold_health_controller(AppName)),
+                ok = file:write_file(AppName ++ "/test/" ++ BaseName ++ "_test.winn",
+                                     scaffold_test(AppName)),
+                ok = file:write_file(AppName ++ "/config/config.winn",
+                                     scaffold_config(AppName)),
+                ok = file:write_file(AppName ++ "/db/seeds.winn", scaffold_seeds()),
+                ok = file:write_file(AppName ++ "/.env.example", scaffold_env_example()),
+                ok = file:write_file(AppName ++ "/README.md", scaffold_readme(AppName));
+            default ->
+                ok = filelib:ensure_path(AppName ++ "/src/models"),
+                ok = filelib:ensure_path(AppName ++ "/src/controllers"),
+                ok = filelib:ensure_path(AppName ++ "/src/tasks"),
+                ok = filelib:ensure_path(AppName ++ "/test"),
+                ok = filelib:ensure_path(AppName ++ "/db/migrations"),
+                ok = filelib:ensure_path(AppName ++ "/config"),
+                ok = file:write_file(AppName ++ "/src/" ++ BaseName ++ ".winn",
+                                     scaffold_winn_default(AppName)),
+                ok = file:write_file(AppName ++ "/test/" ++ BaseName ++ "_test.winn",
+                                     scaffold_test(AppName)),
+                ok = file:write_file(AppName ++ "/config/config.winn",
+                                     scaffold_config(AppName)),
+                ok = file:write_file(AppName ++ "/db/seeds.winn", scaffold_seeds()),
+                ok = file:write_file(AppName ++ "/.env.example", scaffold_env_example()),
+                ok = file:write_file(AppName ++ "/README.md", scaffold_readme(AppName))
+        end,
         ok
     catch
         error:{badmatch, {error, Reason}} ->
@@ -308,36 +346,161 @@ scaffold(AppName) ->
             {error, Reason}
     end.
 
-starter_winn(AppName) ->
-    ModName = to_pascal_case(AppName),
-    io_lib:format(
-        "module ~s\n  def main()\n    IO.puts(\"Hello from ~s!\")\n  end\nend\n",
-        [ModName, AppName]
-    ).
+%% Keep backward-compatible scaffold/1
+scaffold(AppName) -> scaffold(AppName, #{mode => default}).
 
-starter_rebar(AppName) ->
+%% ── Scaffold templates ──────────────────────────────────────────────────
+
+scaffold_winn_minimal(AppName) ->
+    Mod = to_pascal_case(AppName),
+    io_lib:format(
+        "module ~s\n"
+        "  def main()\n"
+        "    IO.puts(\"Hello from ~s!\")\n"
+        "  end\n"
+        "end\n", [Mod, AppName]).
+
+scaffold_winn_default(AppName) ->
+    Mod = to_pascal_case(AppName),
+    io_lib:format(
+        "module ~s\n"
+        "  def main()\n"
+        "    IO.puts(\"Hello from ~s!\")\n"
+        "  end\n"
+        "end\n", [Mod, AppName]).
+
+scaffold_winn_api(AppName) ->
+    Mod = to_pascal_case(AppName),
+    io_lib:format(
+        "module ~s\n"
+        "  use Winn.Router\n"
+        "\n"
+        "  def routes()\n"
+        "    [{:get, \"/api/health\", :health}]\n"
+        "  end\n"
+        "\n"
+        "  def health(conn)\n"
+        "    Server.json(conn, %{status: \"ok\"})\n"
+        "  end\n"
+        "\n"
+        "  def main()\n"
+        "    Server.start(~s, 4000)\n"
+        "    IO.puts(\"~s running on port 4000\")\n"
+        "  end\n"
+        "end\n", [Mod, Mod, AppName]).
+
+scaffold_health_controller(AppName) ->
+    Mod = to_pascal_case(AppName),
+    io_lib:format(
+        "module ~s.HealthController\n"
+        "  def check(conn)\n"
+        "    Server.json(conn, %{status: \"ok\", version: \"0.1.0\"})\n"
+        "  end\n"
+        "end\n", [Mod]).
+
+scaffold_test(AppName) ->
+    Mod = to_pascal_case(AppName),
+    io_lib:format(
+        "module ~sTest\n"
+        "  use Winn.Test\n"
+        "\n"
+        "  def test_hello()\n"
+        "    assert(true)\n"
+        "  end\n"
+        "end\n", [Mod]).
+
+scaffold_config(_AppName) ->
+    "module Config\n"
+    "  def database()\n"
+    "    %{\n"
+    "      adapter: :postgres,\n"
+    "      hostname: System.get_env(\"DB_HOST\", \"localhost\"),\n"
+    "      database: System.get_env(\"DB_NAME\", \"app_dev\"),\n"
+    "      username: System.get_env(\"DB_USER\", \"postgres\"),\n"
+    "      password: System.get_env(\"DB_PASS\", \"\"),\n"
+    "      pool_size: 10\n"
+    "    }\n"
+    "  end\n"
+    "\n"
+    "  def port()\n"
+    "    System.get_env(\"PORT\", \"4000\")\n"
+    "  end\n"
+    "end\n".
+
+scaffold_seeds() ->
+    "module Seeds\n"
+    "  def run()\n"
+    "    IO.puts(\"Seeding database...\")\n"
+    "  end\n"
+    "end\n".
+
+scaffold_env_example() ->
+    "# Database\n"
+    "DB_HOST=localhost\n"
+    "DB_NAME=app_dev\n"
+    "DB_USER=postgres\n"
+    "DB_PASS=\n"
+    "\n"
+    "# Server\n"
+    "PORT=4000\n"
+    "\n"
+    "# Auth\n"
+    "JWT_SECRET=change_me_in_production\n".
+
+scaffold_readme(AppName) ->
+    io_lib:format(
+        "# ~s\n"
+        "\n"
+        "A [Winn](https://winn.ws) project.\n"
+        "\n"
+        "## Getting Started\n"
+        "\n"
+        "```sh\n"
+        "winn run src/~s.winn\n"
+        "```\n"
+        "\n"
+        "## Tests\n"
+        "\n"
+        "```sh\n"
+        "winn test\n"
+        "```\n"
+        "\n"
+        "## Project Structure\n"
+        "\n"
+        "```\n"
+        "src/              Application source\n"
+        "  models/         Data models and schemas\n"
+        "  controllers/    Request handlers\n"
+        "  tasks/          Background tasks\n"
+        "test/             Tests\n"
+        "config/           Configuration\n"
+        "db/migrations/    Database migrations\n"
+        "```\n", [AppName, filename:basename(AppName)]).
+
+scaffold_rebar(AppName) ->
     io_lib:format(
         "{erl_opts, [debug_info]}.\n\n{deps, []}.\n\n"
         "{escript_main_app, ~s}.\n"
         "{escript_name, ~s}.\n",
-        [AppName, AppName]
-    ).
+        [AppName, AppName]).
 
-gitignore_content() ->
-    "_build/\nebin/\n*.beam\n_packages/\n".
+scaffold_gitignore() ->
+    "_build/\n"
+    "ebin/\n"
+    "*.beam\n"
+    "_packages/\n"
+    ".env\n"
+    "*.swp\n"
+    "*~\n"
+    ".DS_Store\n".
 
-seeds_content() ->
-    "# db/seeds.winn\n# Seed your database here.\n\nmodule Seeds\n  def run()\n    IO.puts(\"Seeding database...\")\n  end\nend\n".
-
-starter_package_json(AppName) ->
-    BaseName = filename:basename(AppName),
+scaffold_package_json(BaseName) ->
     io_lib:format(
         "{\n"
         "  \"name\": \"~s\",\n"
         "  \"version\": \"0.1.0\",\n"
         "  \"packages\": {}\n"
-        "}\n",
-        [BaseName]).
+        "}\n", [BaseName]).
 
 %% ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -919,7 +1082,7 @@ print_usage() ->
     io:format(
         "Winn ~s - a compiled language on the BEAM~n~n"
         "Development:~n"
-        "  new <name>          Create a new project~n"
+        "  new <name> [flags]  Create a new project (--api, --minimal)~n"
         "  r, run <file>       Compile and run a file~n"
         "  s, start [module]   Start project (keeps VM alive)~n"
         "  t, test [file]      Run tests~n"
