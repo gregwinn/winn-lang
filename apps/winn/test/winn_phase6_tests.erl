@@ -14,7 +14,13 @@ load_src(Src) ->
 %% ── parse_args tests ──────────────────────────────────────────────────────
 
 parse_args_new_test() ->
-    ?assertEqual({new, "foo"}, winn_cli:parse_args(["new", "foo"])).
+    ?assertEqual({new, "foo", #{mode => default}}, winn_cli:parse_args(["new", "foo"])).
+
+parse_args_new_api_test() ->
+    ?assertEqual({new, "foo", #{mode => api}}, winn_cli:parse_args(["new", "foo", "--api"])).
+
+parse_args_new_minimal_test() ->
+    ?assertEqual({new, "foo", #{mode => minimal}}, winn_cli:parse_args(["new", "foo", "--minimal"])).
 
 parse_args_compile_no_files_test() ->
     ?assertEqual({compile, []}, winn_cli:parse_args(["compile"])).
