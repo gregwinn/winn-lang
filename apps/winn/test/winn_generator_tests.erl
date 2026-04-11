@@ -10,9 +10,9 @@ parse_create_model_args_test() ->
     ?assertEqual({create, ["model", "User", "name:string"]},
                  winn_cli:parse_args(["create", "model", "User", "name:string"])).
 
-parse_c_shorthand_maps_to_create_test() ->
+parse_g_shorthand_maps_to_create_test() ->
     ?assertEqual({create, ["model", "User"]},
-                 winn_cli:parse_args(["c", "model", "User"])).
+                 winn_cli:parse_args(["g", "model", "User"])).
 
 parse_create_scaffold_with_fields_test() ->
     ?assertEqual({create, ["scaffold", "Post", "title:string", "body:text"]},
