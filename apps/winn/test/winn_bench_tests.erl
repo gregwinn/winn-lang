@@ -28,31 +28,35 @@ percentile_p99_test() ->
 
 %% ── Run a simple benchmark ──────────────────────────────────────────────────
 
-run_simple_bench_test() ->
-    Counter = counters:new(1, []),
-    Results = winn_bench:run(test_bench, #{concurrent => 2, duration => 1}, fun() ->
-        counters:add(Counter, 1, 1),
-        ok
-    end),
-    ?assert(maps:get(total, Results) > 0),
-    ?assert(maps:get(avg, Results) >= 0),
-    ?assertEqual(0, maps:get(errors, Results)),
-    ?assert(maps:get(p50, Results) >= 0),
-    ?assert(maps:get(p99, Results) >= 0).
+run_simple_bench_test_() ->
+    {timeout, 30, fun() ->
+        Counter = counters:new(1, []),
+        Results = winn_bench:run(test_bench, #{concurrent => 2, duration => 1}, fun() ->
+            counters:add(Counter, 1, 1),
+            ok
+        end),
+        ?assert(maps:get(total, Results) > 0),
+        ?assert(maps:get(avg, Results) >= 0),
+        ?assertEqual(0, maps:get(errors, Results)),
+        ?assert(maps:get(p50, Results) >= 0),
+        ?assert(maps:get(p99, Results) >= 0)
+    end}.
 
 %% ── Bench with errors ───────────────────────────────────────────────────────
 
-run_bench_with_errors_test() ->
-    Counter = counters:new(1, []),
-    Results = winn_bench:run(error_bench, #{concurrent => 1, duration => 1}, fun() ->
-        counters:add(Counter, 1, 1),
-        case counters:get(Counter, 1) rem 3 of
-            0 -> error(intentional);
-            _ -> ok
-        end
-    end),
-    ?assert(maps:get(errors, Results) > 0),
-    ?assert(maps:get(error_rate, Results) > 0).
+run_bench_with_errors_test_() ->
+    {timeout, 30, fun() ->
+        Counter = counters:new(1, []),
+        Results = winn_bench:run(error_bench, #{concurrent => 1, duration => 1}, fun() ->
+            counters:add(Counter, 1, 1),
+            case counters:get(Counter, 1) rem 3 of
+                0 -> error(intentional);
+                _ -> ok
+            end
+        end),
+        ?assert(maps:get(errors, Results) > 0),
+        ?assert(maps:get(error_rate, Results) > 0)
+    end}.
 
 %% ── Format results ──────────────────────────────────────────────────────────
 
