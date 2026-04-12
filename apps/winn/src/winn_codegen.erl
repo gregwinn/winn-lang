@@ -23,9 +23,14 @@ gen_module({module, _Line, Name, Body}) ->
     Functions = [F || F <- Body, element(1, F) =:= function],
     BehavAttrs = [B || B <- Body, element(1, B) =:= behaviour_attr],
 
-    %% Every def is public in Phase 1/2.
+    %% Functions tagged with `private def` carry a sibling
+    %% {private_marker, _, Name, Arity} form (added by winn_transform).
+    %% Use it to filter the export list.
+    Privates = sets:from_list(
+        [{N, A} || {private_marker, _, N, A} <- Body]),
     Exports = [cerl:c_var({fn_atom(FName), length(Params)})
-               || {function, _, FName, Params, _} <- Functions],
+               || {function, _, FName, Params, _} <- Functions,
+                  not sets:is_element({FName, length(Params)}, Privates)],
 
     Attrs = [{cerl:c_atom(behaviour),
               cerl:abstract([BehName])}

@@ -38,7 +38,7 @@ Nonterminals
 
 %% Phase 1 terminals + Phase 2 additions.
 Terminals
-    'module' 'agent' 'async' 'def' 'struct' 'protocol' 'impl' 'do' 'end' 'use' 'import' 'alias' 'schema' 'field'
+    'module' 'agent' 'async' 'private' 'def' 'struct' 'protocol' 'impl' 'do' 'end' 'use' 'import' 'alias' 'schema' 'field'
     'match' 'ok_kw' 'err_kw' 'nil_kw'
     'if' 'else' 'switch' 'when' 'try' 'rescue'
     'fn' 'for' 'in'
@@ -160,6 +160,12 @@ function_def -> 'def' ident '(' param_list ')' expr_seq 'end'
 
 function_def -> 'def' ident '(' param_list ')' 'when' expr expr_seq 'end'
     : {function_g, line('$1'), val('$2'), '$4', '$7', '$8'}.
+
+function_def -> 'private' 'def' ident '(' param_list ')' expr_seq 'end'
+    : {private_function, line('$1'), val('$3'), '$5', '$7'}.
+
+function_def -> 'private' 'def' ident '(' param_list ')' 'when' expr expr_seq 'end'
+    : {private_function_g, line('$1'), val('$3'), '$5', '$8', '$9'}.
 
 param_list -> '$empty'       : [].
 param_list -> pattern_list   : '$1'.

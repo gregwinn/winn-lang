@@ -22,7 +22,11 @@ transform(Forms) when is_list(Forms) ->
 
 %% ── Top-level forms ────────────────────────────────────────────────────────
 
-transform_form({module, Line, Name, Body}) ->
+transform_form({module, Line, Name, Body0}) ->
+    %% Lower `private def` forms to plain `function` forms, capturing
+    %% privacy as a list of `{private_marker, L, Name, Arity}` siblings
+    %% that the codegen reads to filter exports.
+    {Body, PrivateMarkers} = lower_private_fns(Body0),
     %% Separate use, import, alias directives, schema defs, and regular functions.
     {UseDirs, Rest1}    = lists:partition(fun({use_directive,_,_,_}) -> true; (_) -> false end, Body),
     {ImportDirs, Rest2} = lists:partition(fun({import_directive,_,_}) -> true; (_) -> false end, Rest1),
@@ -68,7 +72,7 @@ transform_form({module, Line, Name, Body}) ->
             [rewrite_directives(F, Imports, AliasMap, LocalFns) || F <- Merged]
     end,
 
-    {module, Line, Name, BehaviourAttrs ++ SyntheticFns ++ Final};
+    {module, Line, Name, BehaviourAttrs ++ SyntheticFns ++ Final ++ PrivateMarkers};
 %% ── Agent desugaring ─────────────────────────────────────────────────────
 %% An `agent` block is desugared into a module with GenServer infrastructure.
 %% The result is fed back into transform_form({module,...}) for normal processing.
@@ -574,6 +578,24 @@ expand_schema_def({schema_def, L, TableBin, Fields}, ModName) ->
 
     [SourceFn, FieldsFn, TypesFn, NewFn,
      AllFn, FindFn, FindByFn, CreateFn, DeleteFn, CountFn].
+
+%% ── Private function lowering ──────────────────────────────────────────────
+%% Rewrite each {private_function, ...} (and the guarded variant) to a plain
+%% {function, ...} so the rest of the pipeline doesn't need to know about
+%% privacy. Privacy is recorded out-of-band as {private_marker, L, Name, Arity}
+%% siblings, which winn_codegen reads to filter the export list.
+
+lower_private_fns(Body) ->
+    lists:foldr(fun lower_private_one/2, {[], []}, Body).
+
+lower_private_one({private_function, L, Name, Params, FBody}, {Forms, Markers}) ->
+    Marker = {private_marker, L, Name, length(Params)},
+    {[{function, L, Name, Params, FBody} | Forms], [Marker | Markers]};
+lower_private_one({private_function_g, L, Name, Params, Guard, FBody}, {Forms, Markers}) ->
+    Marker = {private_marker, L, Name, length(Params)},
+    {[{function_g, L, Name, Params, Guard, FBody} | Forms], [Marker | Markers]};
+lower_private_one(Other, {Forms, Markers}) ->
+    {[Other | Forms], Markers}.
 
 %% ── Function transformation ────────────────────────────────────────────────
 

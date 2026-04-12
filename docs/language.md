@@ -102,6 +102,39 @@ module Math
 end
 ```
 
+### Private Functions
+
+Functions declared with `private def` are callable from within the same module but not exported, so other modules cannot call them. The `private` modifier mirrors the `async def` style used in agents.
+
+```winn
+module Greeter
+  def greet(name)
+    "#{prefix()}, #{name}!"
+  end
+
+  private def prefix()
+    "Hello"
+  end
+end
+
+Greeter.greet("Alice")    # => "Hello, Alice!"
+Greeter.prefix()          # => undef error — prefix is private
+```
+
+Multi-clause and guarded private functions are both supported:
+
+```winn
+private def positive(x) when x > 0
+  x
+end
+
+private def positive(_x)
+  0
+end
+```
+
+Generated API docs (`winn docs`) skip private functions, and the linter warns when a private function has no call sites in its module (`unused_private_function`).
+
 ### Default Parameter Values
 
 Parameters can have default values. When called with fewer arguments, defaults are filled in:
