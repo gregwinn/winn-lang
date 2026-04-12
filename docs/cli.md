@@ -277,7 +277,7 @@ winn lsp   # starts language server on stdio
 
 **Capabilities:**
 
-- **Diagnostics** — inline compile errors from lexer, parser, semantic, and transform phases. Triggered on file open, change, and save.
+- **Diagnostics** — inline compile errors from lexer, parser, semantic, and transform phases, plus lint warnings from `winn lint` (each warning carries its rule name in the LSP `code` field). Triggered on file open, change, and save; cleared on close.
 - **Autocomplete** — dot-triggered completions for 14 modules: IO, String, Enum, List, Map, Server, HTTP, JSON, Logger, File, Repo, System, Task, Regex, Agent.
 
 **VS Code integration:** In the [Winn VS Code extension](https://marketplace.visualstudio.com/items?itemName=gregwinn.language-winn-vscode), set `"winn.lsp.command": "winn lsp"`.

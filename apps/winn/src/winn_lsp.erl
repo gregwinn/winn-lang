@@ -84,8 +84,10 @@ handle_message(#{<<"method">> := <<"textDocument/didSave">>, <<"params">> := Par
     publish_diagnostics(Uri, Text),
     maps:put(Uri, Text, State);
 
-handle_message(#{<<"method">> := <<"textDocument/didClose">>}, State) ->
-    State;
+handle_message(#{<<"method">> := <<"textDocument/didClose">>, <<"params">> := Params}, State) ->
+    #{<<"textDocument">> := #{<<"uri">> := Uri}} = Params,
+    publish_empty_diagnostics(Uri),
+    maps:remove(Uri, State);
 
 handle_message(#{<<"method">> := <<"textDocument/completion">>, <<"id">> := Id,
                  <<"params">> := Params}, State) ->
@@ -107,7 +109,12 @@ handle_message(_, State) ->
 
 publish_diagnostics(Uri, Text) ->
     Source = binary_to_list(Text),
-    Diagnostics = compile_for_diagnostics(Source),
+    publish(Uri, compile_for_diagnostics(Source)).
+
+publish_empty_diagnostics(Uri) ->
+    publish(Uri, []).
+
+publish(Uri, Diagnostics) ->
     Notification = #{
         <<"jsonrpc">> => <<"2.0">>,
         <<"method">> => <<"textDocument/publishDiagnostics">>,
@@ -125,7 +132,7 @@ compile_for_diagnostics(Source) ->
                 Tokens = winn_newline_filter:filter(RawTokens),
                 case winn_parser:parse(Tokens) of
                     {ok, Forms} ->
-                        case winn_semantic:analyse(Forms) of
+                        SemDiags = case winn_semantic:analyse(Forms) of
                             {ok, Analysed} ->
                                 try
                                     _Transformed = winn_transform:transform(Analysed),
@@ -138,7 +145,8 @@ compile_for_diagnostics(Source) ->
                             {error, Errors} ->
                                 [make_diagnostic(L, unicode:characters_to_binary(M), severity(S))
                                  || {S, L, _Name, M} <- Errors]
-                        end;
+                        end,
+                        SemDiags ++ lint_diagnostics(Source);
                     {error, {Line, winn_parser, Msg}} ->
                         [make_diagnostic(Line, format_parse_error(Msg), 1)]
                 end;
@@ -150,6 +158,22 @@ compile_for_diagnostics(Source) ->
     catch
         _:_ -> []
     end.
+
+%% Run the linter and convert each warning to an LSP diagnostic.
+%% Only invoked when parsing succeeded, so lint will parse cleanly too.
+lint_diagnostics(Source) ->
+    try winn_lint:check_string(Source) of
+        {ok, Violations} ->
+            [make_lint_diagnostic(V) || V <- Violations];
+        {error, _} ->
+            []
+    catch
+        _:_ -> []
+    end.
+
+make_lint_diagnostic({Sev, Line, Rule, Msg}) ->
+    Base = make_diagnostic(Line, ensure_binary(Msg), severity(Sev)),
+    Base#{<<"code">> => atom_to_binary(Rule, utf8)}.
 
 make_diagnostic(Line, Message, Severity) ->
     L = case Line of

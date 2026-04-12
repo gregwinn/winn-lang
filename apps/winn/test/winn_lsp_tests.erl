@@ -47,3 +47,33 @@ diagnostic_range_test() ->
 empty_source_test() ->
     Diags = winn_lsp:compile_for_diagnostics(""),
     ?assertEqual([], Diags).
+
+%% ── Lint warnings surface as diagnostics ─────────────────────────────────
+
+lint_warning_test() ->
+    %% camelCase function name trips function_name_convention
+    Source = "module Lintme\n  def badName()\n    IO.puts(\"hi\")\n  end\nend\n",
+    Diags = winn_lsp:compile_for_diagnostics(Source),
+    Warnings = [D || D <- Diags, maps:get(<<"severity">>, D) =:= 2],
+    ?assert(length(Warnings) >= 1),
+    [W | _] = Warnings,
+    ?assertEqual(<<"function_name_convention">>, maps:get(<<"code">>, W)),
+    ?assertEqual(<<"winn">>, maps:get(<<"source">>, W)).
+
+lint_warning_cleared_when_fixed_test() ->
+    Source = "module Lintme\n  def good_name()\n    IO.puts(\"hi\")\n  end\nend\n",
+    Diags = winn_lsp:compile_for_diagnostics(Source),
+    Warnings = [D || D <- Diags,
+                     maps:get(<<"severity">>, D) =:= 2,
+                     maps:get(<<"code">>, D, undefined) =:= <<"function_name_convention">>],
+    ?assertEqual([], Warnings).
+
+%% Lint should not be invoked when parsing fails (no spurious lint errors).
+lint_skipped_on_parse_error_test() ->
+    Source = "module Bad\n  def main()\n    end end\n  end\nend\n",
+    Diags = winn_lsp:compile_for_diagnostics(Source),
+    %% All diagnostics should be parse errors (severity 1, no code field)
+    ?assert(lists:all(fun(D) ->
+        maps:get(<<"severity">>, D) =:= 1
+            andalso not maps:is_key(<<"code">>, D)
+    end, Diags)).
