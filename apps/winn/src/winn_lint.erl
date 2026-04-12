@@ -51,7 +51,8 @@ lint_form({module, Line, Name, Body}, Acc) ->
     Aliases = collect_aliases(Body),
     Acc2 = lint_module_body(Body, Acc1),
     Acc3 = check_unused_imports(Imports, Body, Acc2),
-    check_unused_aliases(Aliases, Body, Acc3);
+    Acc4 = check_unused_aliases(Aliases, Body, Acc3),
+    check_unused_private_functions(Body, Acc4);
 
 lint_form({agent, Line, Name, Body}, Acc) ->
     Acc1 = check_module_name(Line, Name, Acc),
@@ -59,7 +60,8 @@ lint_form({agent, Line, Name, Body}, Acc) ->
     Aliases = collect_aliases(Body),
     Acc2 = lint_module_body(Body, Acc1),
     Acc3 = check_unused_imports(Imports, Body, Acc2),
-    check_unused_aliases(Aliases, Body, Acc3);
+    Acc4 = check_unused_aliases(Aliases, Body, Acc3),
+    check_unused_private_functions(Body, Acc4);
 
 lint_form(_Other, Acc) ->
     Acc.
@@ -75,6 +77,20 @@ lint_body_form({function, Line, Name, Params, Body}, Acc) ->
     lint_exprs(Body, Acc4);
 
 lint_body_form({function_g, Line, Name, Params, _Guard, Body}, Acc) ->
+    Acc1 = check_function_name(Line, Name, Acc),
+    Acc2 = check_empty_body(Line, Name, Body, Acc1),
+    Acc3 = check_large_function(Line, Name, Body, Acc2),
+    Acc4 = check_unused_variables(Line, Params, Body, Acc3),
+    lint_exprs(Body, Acc4);
+
+lint_body_form({private_function, Line, Name, Params, Body}, Acc) ->
+    Acc1 = check_function_name(Line, Name, Acc),
+    Acc2 = check_empty_body(Line, Name, Body, Acc1),
+    Acc3 = check_large_function(Line, Name, Body, Acc2),
+    Acc4 = check_unused_variables(Line, Params, Body, Acc3),
+    lint_exprs(Body, Acc4);
+
+lint_body_form({private_function_g, Line, Name, Params, _Guard, Body}, Acc) ->
     Acc1 = check_function_name(Line, Name, Acc),
     Acc2 = check_empty_body(Line, Name, Body, Acc1),
     Acc3 = check_large_function(Line, Name, Body, Acc2),
@@ -456,6 +472,73 @@ check_unused_aliases(Aliases, Body, Acc) ->
         end
     end, Acc, Aliases).
 
+%% ── Rule: unused_private_function ──────────────────────────────────────
+
+check_unused_private_functions(Body, Acc) ->
+    Privates = [{Line, Name, length(Params)}
+                || {private_function, Line, Name, Params, _} <- Body]
+            ++ [{Line, Name, length(Params)}
+                || {private_function_g, Line, Name, Params, _, _} <- Body],
+    case Privates of
+        [] -> Acc;
+        _ ->
+            Called = collect_local_call_names(Body),
+            lists:foldl(fun({Line, Name, Arity}, A) ->
+                case sets:is_element(Name, Called) of
+                    true  -> A;
+                    false ->
+                        Msg = io_lib:format(
+                            "Unused private function: '~s/~B'", [Name, Arity]),
+                        [{warning, Line, unused_private_function,
+                          lists:flatten(Msg)} | A]
+                end
+            end, Acc, Privates)
+    end.
+
+%% Collect bare local call names (function-call atoms without a module).
+collect_local_call_names(Forms) ->
+    sets:from_list(local_calls(Forms, [])).
+
+local_calls([], Acc) -> Acc;
+local_calls([F | Rest], Acc) -> local_calls(Rest, local_calls_one(F, Acc));
+local_calls(Other, Acc) -> local_calls_one(Other, Acc).
+
+local_calls_one({call, _, FunName, Args}, Acc) when is_atom(FunName) ->
+    local_calls(Args, [FunName | Acc]);
+local_calls_one({call, _, _, Args}, Acc) ->
+    local_calls(Args, Acc);
+local_calls_one({function, _, _, _, Body}, Acc)         -> local_calls(Body, Acc);
+local_calls_one({function_g, _, _, _, _, Body}, Acc)    -> local_calls(Body, Acc);
+local_calls_one({private_function, _, _, _, Body}, Acc) -> local_calls(Body, Acc);
+local_calls_one({private_function_g, _, _, _, _, Body}, Acc) -> local_calls(Body, Acc);
+local_calls_one({agent_fn, _, _, _, Body}, Acc)         -> local_calls(Body, Acc);
+local_calls_one({agent_fn_g, _, _, _, _, Body}, Acc)    -> local_calls(Body, Acc);
+local_calls_one({agent_cast_fn, _, _, _, Body}, Acc)    -> local_calls(Body, Acc);
+local_calls_one({dot_call, _, _, _, Args}, Acc)         -> local_calls(Args, Acc);
+local_calls_one({op, _, _, L, R}, Acc)                  -> local_calls(R, local_calls_one(L, Acc));
+local_calls_one({unary, _, _, E}, Acc)                  -> local_calls_one(E, Acc);
+local_calls_one({assign, _, _, E}, Acc)                 -> local_calls_one(E, Acc);
+local_calls_one({pipe, _, L, R}, Acc)                   -> local_calls_one(R, local_calls_one(L, Acc));
+local_calls_one({list, _, Es}, Acc)                     -> local_calls(Es, Acc);
+local_calls_one({tuple, _, Es}, Acc)                    -> local_calls(Es, Acc);
+local_calls_one({map, _, Pairs}, Acc) ->
+    lists:foldl(fun({_K, V}, A) -> local_calls_one(V, A) end, Acc, Pairs);
+local_calls_one({if_expr, _, C, T, E}, Acc) ->
+    local_calls(E, local_calls(T, local_calls_one(C, Acc)));
+local_calls_one({switch_expr, _, Scrut, Clauses}, Acc) ->
+    Acc1 = local_calls_one(Scrut, Acc),
+    lists:foldl(fun({case_clause, _, _, _, B}, A) -> local_calls(B, A);
+                   (_, A) -> A
+                end, Acc1, Clauses);
+local_calls_one({case_expr, _, Scrut, Clauses}, Acc) ->
+    Acc1 = local_calls_one(Scrut, Acc),
+    lists:foldl(fun({case_clause, _, _, _, B}, A) -> local_calls(B, A);
+                   (_, A) -> A
+                end, Acc1, Clauses);
+local_calls_one({block_call, _, CallExpr, _, BlockBody}, Acc) ->
+    local_calls(BlockBody, local_calls_one(CallExpr, Acc));
+local_calls_one(_, Acc) -> Acc.
+
 %% Collect all module names referenced in dot_call expressions
 collect_called_modules(Forms) ->
     collect_called_modules(Forms, []).
@@ -477,6 +560,10 @@ collect_calls_from_form({dot_call, _Line, {atom, _, Mod}, _Fun, Args}, Acc) ->
 collect_calls_from_form({function, _Line, _Name, _Params, Body}, Acc) ->
     collect_called_modules(Body, Acc);
 collect_calls_from_form({function_g, _Line, _Name, _Params, _Guard, Body}, Acc) ->
+    collect_called_modules(Body, Acc);
+collect_calls_from_form({private_function, _Line, _Name, _Params, Body}, Acc) ->
+    collect_called_modules(Body, Acc);
+collect_calls_from_form({private_function_g, _Line, _Name, _Params, _Guard, Body}, Acc) ->
     collect_called_modules(Body, Acc);
 collect_calls_from_form({agent_fn, _Line, _Name, _Params, Body}, Acc) ->
     collect_called_modules(Body, Acc);

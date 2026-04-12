@@ -103,7 +103,9 @@ collect_module_comments(Lines, N, Acc) ->
     end.
 
 extract_functions(Lines, Body) ->
-    %% Get all function definitions with their line numbers
+    %% Get all function definitions with their line numbers.
+    %% We intentionally only match the public `function` tag, not
+    %% `private_function` — privates are excluded from generated docs.
     RawFns = [{Name, Params, L} || {function, L, Name, Params, _} <- Body],
     %% Group by name (multi-clause functions)
     Grouped = group_functions(RawFns),

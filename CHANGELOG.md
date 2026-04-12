@@ -4,8 +4,17 @@ All notable changes to the Winn language are documented here.
 
 ## [Unreleased]
 
+### Language
+- **`private def`** — module-private functions. Functions declared with `private def name(...)` are callable from within the same module but excluded from the module's export list, so cross-module calls raise `undef`. Mirrors the existing `async def` modifier-before-`def` style. Multi-clause and guarded variants both supported. (#128)
+
 ### Developer Tooling
 - **LSP Phase 1 — lint diagnostics** — `winn lsp` now publishes lint warnings alongside compile errors. Each warning carries its rule name (e.g. `function_name_convention`) in the `code` field so editors can group and filter rules. Closing a document clears its diagnostics and removes it from the in-memory buffer. (#118)
+
+### Linter
+- **`unused_private_function`** rule — warns when a `private def` has no call sites in the same module.
+
+### Tooling
+- **`winn docs`** — generated API docs now skip private functions.
 
 ## [0.9.0] - 2026-04-09
 

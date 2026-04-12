@@ -39,6 +39,7 @@ Rules.
 module                      : {token, {'module', TokenLine}}.
 agent                       : {token, {'agent', TokenLine}}.
 async                       : {token, {'async', TokenLine}}.
+private                     : {token, {'private', TokenLine}}.
 def                         : {token, {'def', TokenLine}}.
 struct                      : {token, {'struct', TokenLine}}.
 protocol                    : {token, {'protocol', TokenLine}}.
