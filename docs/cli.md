@@ -278,6 +278,9 @@ winn lsp   # starts language server on stdio
 **Capabilities:**
 
 - **Diagnostics** — inline compile errors from lexer, parser, semantic, and transform phases, plus lint warnings from `winn lint` (each warning carries its rule name in the LSP `code` field). Triggered on file open, change, and save; cleared on close.
+- **Document symbols** — outline panel support. Modules and agents become container symbols; functions, imports, and aliases appear as children.
+- **Hover** — markdown signature (`**name/arity** — \`def name(params)\``) plus any `#` doc comments immediately preceding the function definition.
+- **Go to definition** — local function calls jump to their def in the same file. `Module.fun()` calls resolve to `<lowercase_mod>.winn` under `src/`, `src/models/`, `src/controllers/`, or `src/tasks/`. Stdlib calls (IO, String, Enum, …) have no source to jump to.
 - **Autocomplete** — dot-triggered completions for 14 modules: IO, String, Enum, List, Map, Server, HTTP, JSON, Logger, File, Repo, System, Task, Regex, Agent.
 
 **VS Code integration:** In the [Winn VS Code extension](https://marketplace.visualstudio.com/items?itemName=gregwinn.language-winn-vscode), set `"winn.lsp.command": "winn lsp"`.
