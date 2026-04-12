@@ -9,7 +9,8 @@
 %% Transport: stdio with Content-Length framed JSON-RPC 2.0.
 
 -module(winn_lsp).
--export([start/0, compile_for_diagnostics/1]).
+-export([start/0, compile_for_diagnostics/1, document_symbols/1,
+         hover_at/3, definition_at/4]).
 
 %% ── Entry point ───────────────────────────────────────────────────────────
 
@@ -43,7 +44,10 @@ handle_message(#{<<"method">> := <<"initialize">>, <<"id">> := Id} = _Msg, State
             },
             <<"completionProvider">> => #{
                 <<"triggerCharacters">> => [<<".">>]
-            }
+            },
+            <<"documentSymbolProvider">> => true,
+            <<"hoverProvider">> => true,
+            <<"definitionProvider">> => true
         },
         <<"serverInfo">> => #{
             <<"name">> => <<"winn-lsp">>,
@@ -88,6 +92,32 @@ handle_message(#{<<"method">> := <<"textDocument/didClose">>, <<"params">> := Pa
     #{<<"textDocument">> := #{<<"uri">> := Uri}} = Params,
     publish_empty_diagnostics(Uri),
     maps:remove(Uri, State);
+
+handle_message(#{<<"method">> := <<"textDocument/documentSymbol">>, <<"id">> := Id,
+                 <<"params">> := Params}, State) ->
+    #{<<"textDocument">> := #{<<"uri">> := Uri}} = Params,
+    Text = maps:get(Uri, State, <<>>),
+    Symbols = document_symbols(binary_to_list(Text)),
+    send_response(Id, Symbols),
+    State;
+
+handle_message(#{<<"method">> := <<"textDocument/hover">>, <<"id">> := Id,
+                 <<"params">> := Params}, State) ->
+    #{<<"textDocument">> := #{<<"uri">> := Uri},
+      <<"position">> := #{<<"line">> := Line, <<"character">> := Char}} = Params,
+    Text = maps:get(Uri, State, <<>>),
+    Result = hover_at(binary_to_list(Text), Line, Char),
+    send_response(Id, Result),
+    State;
+
+handle_message(#{<<"method">> := <<"textDocument/definition">>, <<"id">> := Id,
+                 <<"params">> := Params}, State) ->
+    #{<<"textDocument">> := #{<<"uri">> := Uri},
+      <<"position">> := #{<<"line">> := Line, <<"character">> := Char}} = Params,
+    Text = maps:get(Uri, State, <<>>),
+    Result = definition_at(Uri, binary_to_list(Text), Line, Char),
+    send_response(Id, Result),
+    State;
 
 handle_message(#{<<"method">> := <<"textDocument/completion">>, <<"id">> := Id,
                  <<"params">> := Params}, State) ->
@@ -212,6 +242,393 @@ extract_line(Term) when is_tuple(Term), tuple_size(Term) >= 2 ->
         _ -> none
     end;
 extract_line(_) -> none.
+
+%% ── Document symbols ──────────────────────────────────────────────────────
+
+%% Parse source and return an LSP DocumentSymbol[] tree.
+%% Top level entries are modules/agents; their children are functions,
+%% imports, and aliases. Returns [] on parse failure (the editor falls
+%% back to its diagnostic squiggles).
+document_symbols(Source) ->
+    try
+        case winn_lexer:string(Source) of
+            {ok, RawTokens, _} ->
+                Tokens = winn_newline_filter:filter(RawTokens),
+                case winn_parser:parse(Tokens) of
+                    {ok, Forms} -> [form_symbol(F) || F <- Forms, is_top_form(F)];
+                    _ -> []
+                end;
+            _ -> []
+        end
+    catch
+        _:_ -> []
+    end.
+
+is_top_form({module, _, _, _}) -> true;
+is_top_form({agent, _, _, _})  -> true;
+is_top_form(_) -> false.
+
+form_symbol({module, Line, Name, Body}) ->
+    container_symbol(Name, Line, 2, body_children(Body));   %% Module = 2
+form_symbol({agent, Line, Name, Body}) ->
+    container_symbol(Name, Line, 5, body_children(Body)).   %% Class  = 5
+
+body_children(Body) ->
+    lists:flatmap(fun child_symbol/1, Body).
+
+child_symbol({function, Line, Name, Params, _Body}) ->
+    [function_symbol(Name, length(Params), Line)];
+child_symbol({function_g, Line, Name, Params, _Guard, _Body}) ->
+    [function_symbol(Name, length(Params), Line)];
+child_symbol({agent_fn, Line, Name, Params, _Body}) ->
+    [function_symbol(Name, length(Params), Line)];
+child_symbol({agent_fn_g, Line, Name, Params, _Guard, _Body}) ->
+    [function_symbol(Name, length(Params), Line)];
+child_symbol({agent_cast_fn, Line, Name, Params, _Body}) ->
+    [function_symbol(Name, length(Params), Line)];
+child_symbol({import_directive, Line, ModName}) ->
+    [leaf_symbol(atom_to_binary(ModName, utf8), Line, 3)];   %% Namespace = 3
+child_symbol({alias_directive, Line, Parent, Short}) ->
+    Label = <<(atom_to_binary(Parent, utf8))/binary, ".",
+              (atom_to_binary(Short, utf8))/binary>>,
+    [leaf_symbol(Label, Line, 3)];
+child_symbol(_) ->
+    [].
+
+function_symbol(Name, Arity, Line) ->
+    Label = unicode:characters_to_binary(
+        io_lib:format("~s/~B", [atom_to_list(Name), Arity])),
+    leaf_symbol(Label, Line, 12).                            %% Function = 12
+
+container_symbol(Name, Line, Kind, Children) ->
+    Range = line_range(Line),
+    #{
+        <<"name">>           => atom_to_binary(Name, utf8),
+        <<"kind">>           => Kind,
+        <<"range">>          => Range,
+        <<"selectionRange">> => Range,
+        <<"children">>       => Children
+    }.
+
+leaf_symbol(Name, Line, Kind) ->
+    Range = line_range(Line),
+    #{
+        <<"name">>           => Name,
+        <<"kind">>           => Kind,
+        <<"range">>          => Range,
+        <<"selectionRange">> => Range,
+        <<"children">>       => []
+    }.
+
+line_range(Line) ->
+    L = max(0, Line - 1),
+    #{
+        <<"start">> => #{<<"line">> => L, <<"character">> => 0},
+        <<"end">>   => #{<<"line">> => L, <<"character">> => 0}
+    }.
+
+%% ── Hover ─────────────────────────────────────────────────────────────────
+
+%% Look up the identifier at the given LSP position and return an LSP
+%% Hover response, or `null` if nothing useful sits at the cursor.
+%% Line and Char are 0-indexed (LSP convention).
+hover_at(Source, Line, Char) ->
+    case identifier_at(Source, Line, Char) of
+        none -> null;
+        {ok, Name} ->
+            case lookup_function(Source, Name) of
+                {ok, {DefLine, Params}} ->
+                    Doc = doc_comment_for(Source, DefLine),
+                    build_hover(Name, Params, Doc);
+                none -> null
+            end
+    end.
+
+identifier_at(Source, Line, Char) ->
+    Lines = split_lines(Source),
+    case nth_or_none(Line + 1, Lines) of
+        none -> none;
+        LineStr -> word_at(LineStr, Char)
+    end.
+
+split_lines(Source) -> split_lines(Source, [], []).
+split_lines([], Cur, Acc) -> lists:reverse([lists:reverse(Cur) | Acc]);
+split_lines([$\n | Rest], Cur, Acc) -> split_lines(Rest, [], [lists:reverse(Cur) | Acc]);
+split_lines([C | Rest], Cur, Acc) -> split_lines(Rest, [C | Cur], Acc).
+
+nth_or_none(N, _) when N =< 0 -> none;
+nth_or_none(N, L) when N > length(L) -> none;
+nth_or_none(N, L) -> lists:nth(N, L).
+
+%% Extract the identifier surrounding column Col (0-indexed) on a line.
+%% Identifier chars: a-zA-Z0-9_? — Winn allows trailing `?`.
+word_at(_, Col) when Col < 0 -> none;
+word_at(LineStr, Col) ->
+    Len = length(LineStr),
+    case Col >= Len of
+        true -> none;
+        false ->
+            case ident_char(lists:nth(Col + 1, LineStr)) of
+                false -> none;
+                true ->
+                    Start = expand_left(LineStr, Col),
+                    End   = expand_right(LineStr, Col, Len),
+                    {ok, lists:sublist(LineStr, Start + 1, End - Start)}
+            end
+    end.
+
+%% Walk left while the char immediately to the left is an ident char.
+%% Returns the 0-indexed start of the word (inclusive).
+expand_left(_, 0) -> 0;
+expand_left(LineStr, Col) ->
+    case ident_char(lists:nth(Col, LineStr)) of
+        true  -> expand_left(LineStr, Col - 1);
+        false -> Col
+    end.
+
+%% Walk right while the char immediately to the right is an ident char.
+%% Returns the 0-indexed end of the word (exclusive).
+expand_right(_, Col, Len) when Col + 1 >= Len -> Len;
+expand_right(LineStr, Col, Len) ->
+    case ident_char(lists:nth(Col + 2, LineStr)) of
+        true  -> expand_right(LineStr, Col + 1, Len);
+        false -> Col + 1
+    end.
+
+ident_char(C) when C >= $a, C =< $z -> true;
+ident_char(C) when C >= $A, C =< $Z -> true;
+ident_char(C) when C >= $0, C =< $9 -> true;
+ident_char($_) -> true;
+ident_char($?) -> true;
+ident_char(_)  -> false.
+
+%% Find the first function (or agent fn) named Name in the source.
+lookup_function(Source, Name) ->
+    try
+        {ok, RawTokens, _} = winn_lexer:string(Source),
+        Tokens = winn_newline_filter:filter(RawTokens),
+        {ok, Forms} = winn_parser:parse(Tokens),
+        Target = list_to_atom(Name),
+        find_fn(Forms, Target)
+    catch
+        _:_ -> none
+    end.
+
+find_fn([], _) -> none;
+find_fn([{module, _, _, Body} | Rest], Name) ->
+    case find_fn_in_body(Body, Name) of
+        none -> find_fn(Rest, Name);
+        Found -> Found
+    end;
+find_fn([{agent, _, _, Body} | Rest], Name) ->
+    case find_fn_in_body(Body, Name) of
+        none -> find_fn(Rest, Name);
+        Found -> Found
+    end;
+find_fn([_ | Rest], Name) -> find_fn(Rest, Name).
+
+find_fn_in_body([], _) -> none;
+find_fn_in_body([{function, Line, Name, Params, _} | _], Name) ->
+    {ok, {Line, Params}};
+find_fn_in_body([{function_g, Line, Name, Params, _, _} | _], Name) ->
+    {ok, {Line, Params}};
+find_fn_in_body([{agent_fn, Line, Name, Params, _} | _], Name) ->
+    {ok, {Line, Params}};
+find_fn_in_body([{agent_fn_g, Line, Name, Params, _, _} | _], Name) ->
+    {ok, {Line, Params}};
+find_fn_in_body([{agent_cast_fn, Line, Name, Params, _} | _], Name) ->
+    {ok, {Line, Params}};
+find_fn_in_body([_ | Rest], Name) ->
+    find_fn_in_body(Rest, Name).
+
+%% Collect consecutive `# ...` line comments immediately preceding DefLine.
+doc_comment_for(Source, DefLine) ->
+    Comments = winn_comment:extract(Source),
+    Lines = [{L, strip_hash(T)} || {L, T, line} <- Comments],
+    LineMap = maps:from_list(Lines),
+    walk_back(DefLine - 1, LineMap, []).
+
+walk_back(Line, _Map, Acc) when Line < 1 -> finish_doc(Acc);
+walk_back(Line, Map, Acc) ->
+    case maps:find(Line, Map) of
+        {ok, Text} -> walk_back(Line - 1, Map, [Text | Acc]);
+        error      -> finish_doc(Acc)
+    end.
+
+finish_doc([]) -> none;
+finish_doc(Lines) ->
+    unicode:characters_to_binary(string:join(Lines, "\n")).
+
+strip_hash([$#, $\s | Rest]) -> Rest;
+strip_hash([$# | Rest]) -> Rest;
+strip_hash(Other) -> Other.
+
+build_hover(Name, Params, Doc) ->
+    ParamStrs = [param_name(P) || P <- Params],
+    Sig = io_lib:format("**~s/~B** — `def ~s(~s)`",
+                        [Name, length(Params), Name, string:join(ParamStrs, ", ")]),
+    Body = case Doc of
+        none -> Sig;
+        _    -> [Sig, "\n\n", Doc]
+    end,
+    Value = unicode:characters_to_binary(Body),
+    #{
+        <<"contents">> => #{
+            <<"kind">>  => <<"markdown">>,
+            <<"value">> => Value
+        }
+    }.
+
+param_name({var, _, Name})        -> atom_to_list(Name);
+param_name({pat_var, _, Name})    -> atom_to_list(Name);
+param_name({pat_wildcard, _})     -> "_";
+param_name({pat_atom, _, A})      -> atom_to_list(A);
+param_name(_)                     -> "_".
+
+%% ── Go to definition ──────────────────────────────────────────────────────
+
+%% Resolve the identifier under the cursor to its definition Location.
+%% Currently handles same-file function definitions; cross-file Mod.fun()
+%% resolution lives in resolve_dot_call_definition/2 below.
+definition_at(Uri, Source, Line, Char) ->
+    case identifier_at(Source, Line, Char) of
+        none -> null;
+        {ok, Name} ->
+            case dot_call_at(Source, Line, Char) of
+                {ok, Module, FnName} ->
+                    resolve_dot_call_definition(Uri, Module, FnName);
+                none ->
+                    case lookup_function(Source, Name) of
+                        {ok, {DefLine, _Params}} -> location(Uri, DefLine);
+                        none -> null
+                    end
+            end
+    end.
+
+%% Detect if the cursor sits on the function part of a `Module.fun(` call.
+%% Returns {ok, ModuleAtom, FnNameAtom} or `none`.
+dot_call_at(Source, Line, Char) ->
+    Lines = split_lines(Source),
+    case nth_or_none(Line + 1, Lines) of
+        none -> none;
+        LineStr ->
+            case word_at(LineStr, Char) of
+                {ok, Word} ->
+                    %% Check if char immediately before the word's start is `.`
+                    %% and the chars before that form a Module name (PascalCase).
+                    Start = expand_left(LineStr, Char),
+                    case Start >= 1 andalso lists:nth(Start, LineStr) =:= $. of
+                        true ->
+                            ModEnd = Start - 1,
+                            ModStart = expand_left_module(LineStr, ModEnd),
+                            case ModEnd >= ModStart of
+                                true ->
+                                    ModStr = lists:sublist(LineStr, ModStart + 1,
+                                                           ModEnd - ModStart),
+                                    case is_module_name(ModStr) of
+                                        true  -> {ok, list_to_atom(ModStr),
+                                                       list_to_atom(Word)};
+                                        false -> none
+                                    end;
+                                false -> none
+                            end;
+                        false -> none
+                    end;
+                none -> none
+            end
+    end.
+
+expand_left_module(_, 0) -> 0;
+expand_left_module(LineStr, Col) ->
+    case ident_char(lists:nth(Col, LineStr)) of
+        true  -> expand_left_module(LineStr, Col - 1);
+        false -> Col
+    end.
+
+is_module_name([C | _]) when C >= $A, C =< $Z -> true;
+is_module_name(_) -> false.
+
+%% Resolve `Mod.fun()` to a Location by searching the project src/ tree
+%% for `<lowercase_mod>.winn` and looking up the function in that file.
+%% Stdlib modules (IO, String, etc.) return null — no source to jump to.
+resolve_dot_call_definition(CurrentUri, Module, FnName) ->
+    case is_stdlib_module(Module) of
+        true -> null;
+        false ->
+            case find_module_source(CurrentUri, Module) of
+                {ok, Path} ->
+                    case file:read_file(Path) of
+                        {ok, Bin} ->
+                            Source = binary_to_list(Bin),
+                            case lookup_function(Source, atom_to_list(FnName)) of
+                                {ok, {DefLine, _}} ->
+                                    location(path_to_uri(Path), DefLine);
+                                none -> null
+                            end;
+                        _ -> null
+                    end;
+                none -> null
+            end
+    end.
+
+is_stdlib_module(M) ->
+    lists:member(M, ['IO','String','Enum','List','Map','Server','HTTP','JSON',
+                     'Logger','File','Repo','System','Task','Regex','Agent',
+                     'Crypto','UUID','DateTime','Winn','JWT','WS','Config']).
+
+%% Walk up from the current file looking for a `src/` directory, then
+%% search src/, src/models/, src/controllers/, src/tasks/ for the module file.
+find_module_source(CurrentUri, Module) ->
+    CurrentPath = uri_to_path(CurrentUri),
+    case find_src_root(filename:dirname(CurrentPath)) of
+        none -> none;
+        {ok, SrcDir} ->
+            FileName = string:lowercase(atom_to_list(Module)) ++ ".winn",
+            Candidates = [
+                filename:join(SrcDir, FileName),
+                filename:join([SrcDir, "models", FileName]),
+                filename:join([SrcDir, "controllers", FileName]),
+                filename:join([SrcDir, "tasks", FileName])
+            ],
+            first_existing(Candidates)
+    end.
+
+find_src_root("/") -> none;
+find_src_root("") -> none;
+find_src_root(Dir) ->
+    case filename:basename(Dir) of
+        "src" -> {ok, Dir};
+        _ ->
+            Candidate = filename:join(Dir, "src"),
+            case filelib:is_dir(Candidate) of
+                true  -> {ok, Candidate};
+                false -> find_src_root(filename:dirname(Dir))
+            end
+    end.
+
+first_existing([]) -> none;
+first_existing([P | Rest]) ->
+    case filelib:is_regular(P) of
+        true  -> {ok, P};
+        false -> first_existing(Rest)
+    end.
+
+uri_to_path(<<"file://", Rest/binary>>) -> binary_to_list(Rest);
+uri_to_path(Bin) when is_binary(Bin)    -> binary_to_list(Bin);
+uri_to_path(Str) when is_list(Str)      -> Str.
+
+path_to_uri(Path) ->
+    unicode:characters_to_binary(["file://", Path]).
+
+location(Uri, Line) ->
+    L = max(0, Line - 1),
+    #{
+        <<"uri">>   => ensure_binary(Uri),
+        <<"range">> => #{
+            <<"start">> => #{<<"line">> => L, <<"character">> => 0},
+            <<"end">>   => #{<<"line">> => L, <<"character">> => 0}
+        }
+    }.
 
 %% ── Completions ───────────────────────────────────────────────────────────
 
