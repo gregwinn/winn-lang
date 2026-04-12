@@ -9,7 +9,8 @@
 %% Transport: stdio with Content-Length framed JSON-RPC 2.0.
 
 -module(winn_lsp).
--export([start/0, compile_for_diagnostics/1, document_symbols/1, hover_at/3]).
+-export([start/0, compile_for_diagnostics/1, document_symbols/1,
+         hover_at/3, definition_at/4]).
 
 %% ── Entry point ───────────────────────────────────────────────────────────
 
@@ -45,7 +46,8 @@ handle_message(#{<<"method">> := <<"initialize">>, <<"id">> := Id} = _Msg, State
                 <<"triggerCharacters">> => [<<".">>]
             },
             <<"documentSymbolProvider">> => true,
-            <<"hoverProvider">> => true
+            <<"hoverProvider">> => true,
+            <<"definitionProvider">> => true
         },
         <<"serverInfo">> => #{
             <<"name">> => <<"winn-lsp">>,
@@ -105,6 +107,15 @@ handle_message(#{<<"method">> := <<"textDocument/hover">>, <<"id">> := Id,
       <<"position">> := #{<<"line">> := Line, <<"character">> := Char}} = Params,
     Text = maps:get(Uri, State, <<>>),
     Result = hover_at(binary_to_list(Text), Line, Char),
+    send_response(Id, Result),
+    State;
+
+handle_message(#{<<"method">> := <<"textDocument/definition">>, <<"id">> := Id,
+                 <<"params">> := Params}, State) ->
+    #{<<"textDocument">> := #{<<"uri">> := Uri},
+      <<"position">> := #{<<"line">> := Line, <<"character">> := Char}} = Params,
+    Text = maps:get(Uri, State, <<>>),
+    Result = definition_at(Uri, binary_to_list(Text), Line, Char),
     send_response(Id, Result),
     State;
 
@@ -473,6 +484,151 @@ param_name({pat_var, _, Name})    -> atom_to_list(Name);
 param_name({pat_wildcard, _})     -> "_";
 param_name({pat_atom, _, A})      -> atom_to_list(A);
 param_name(_)                     -> "_".
+
+%% ── Go to definition ──────────────────────────────────────────────────────
+
+%% Resolve the identifier under the cursor to its definition Location.
+%% Currently handles same-file function definitions; cross-file Mod.fun()
+%% resolution lives in resolve_dot_call_definition/2 below.
+definition_at(Uri, Source, Line, Char) ->
+    case identifier_at(Source, Line, Char) of
+        none -> null;
+        {ok, Name} ->
+            case dot_call_at(Source, Line, Char) of
+                {ok, Module, FnName} ->
+                    resolve_dot_call_definition(Uri, Module, FnName);
+                none ->
+                    case lookup_function(Source, Name) of
+                        {ok, {DefLine, _Params}} -> location(Uri, DefLine);
+                        none -> null
+                    end
+            end
+    end.
+
+%% Detect if the cursor sits on the function part of a `Module.fun(` call.
+%% Returns {ok, ModuleAtom, FnNameAtom} or `none`.
+dot_call_at(Source, Line, Char) ->
+    Lines = split_lines(Source),
+    case nth_or_none(Line + 1, Lines) of
+        none -> none;
+        LineStr ->
+            case word_at(LineStr, Char) of
+                {ok, Word} ->
+                    %% Check if char immediately before the word's start is `.`
+                    %% and the chars before that form a Module name (PascalCase).
+                    Start = expand_left(LineStr, Char),
+                    case Start >= 1 andalso lists:nth(Start, LineStr) =:= $. of
+                        true ->
+                            ModEnd = Start - 1,
+                            ModStart = expand_left_module(LineStr, ModEnd),
+                            case ModEnd >= ModStart of
+                                true ->
+                                    ModStr = lists:sublist(LineStr, ModStart + 1,
+                                                           ModEnd - ModStart),
+                                    case is_module_name(ModStr) of
+                                        true  -> {ok, list_to_atom(ModStr),
+                                                       list_to_atom(Word)};
+                                        false -> none
+                                    end;
+                                false -> none
+                            end;
+                        false -> none
+                    end;
+                none -> none
+            end
+    end.
+
+expand_left_module(_, 0) -> 0;
+expand_left_module(LineStr, Col) ->
+    case ident_char(lists:nth(Col, LineStr)) of
+        true  -> expand_left_module(LineStr, Col - 1);
+        false -> Col
+    end.
+
+is_module_name([C | _]) when C >= $A, C =< $Z -> true;
+is_module_name(_) -> false.
+
+%% Resolve `Mod.fun()` to a Location by searching the project src/ tree
+%% for `<lowercase_mod>.winn` and looking up the function in that file.
+%% Stdlib modules (IO, String, etc.) return null — no source to jump to.
+resolve_dot_call_definition(CurrentUri, Module, FnName) ->
+    case is_stdlib_module(Module) of
+        true -> null;
+        false ->
+            case find_module_source(CurrentUri, Module) of
+                {ok, Path} ->
+                    case file:read_file(Path) of
+                        {ok, Bin} ->
+                            Source = binary_to_list(Bin),
+                            case lookup_function(Source, atom_to_list(FnName)) of
+                                {ok, {DefLine, _}} ->
+                                    location(path_to_uri(Path), DefLine);
+                                none -> null
+                            end;
+                        _ -> null
+                    end;
+                none -> null
+            end
+    end.
+
+is_stdlib_module(M) ->
+    lists:member(M, ['IO','String','Enum','List','Map','Server','HTTP','JSON',
+                     'Logger','File','Repo','System','Task','Regex','Agent',
+                     'Crypto','UUID','DateTime','Winn','JWT','WS','Config']).
+
+%% Walk up from the current file looking for a `src/` directory, then
+%% search src/, src/models/, src/controllers/, src/tasks/ for the module file.
+find_module_source(CurrentUri, Module) ->
+    CurrentPath = uri_to_path(CurrentUri),
+    case find_src_root(filename:dirname(CurrentPath)) of
+        none -> none;
+        {ok, SrcDir} ->
+            FileName = string:lowercase(atom_to_list(Module)) ++ ".winn",
+            Candidates = [
+                filename:join(SrcDir, FileName),
+                filename:join([SrcDir, "models", FileName]),
+                filename:join([SrcDir, "controllers", FileName]),
+                filename:join([SrcDir, "tasks", FileName])
+            ],
+            first_existing(Candidates)
+    end.
+
+find_src_root("/") -> none;
+find_src_root("") -> none;
+find_src_root(Dir) ->
+    case filename:basename(Dir) of
+        "src" -> {ok, Dir};
+        _ ->
+            Candidate = filename:join(Dir, "src"),
+            case filelib:is_dir(Candidate) of
+                true  -> {ok, Candidate};
+                false -> find_src_root(filename:dirname(Dir))
+            end
+    end.
+
+first_existing([]) -> none;
+first_existing([P | Rest]) ->
+    case filelib:is_regular(P) of
+        true  -> {ok, P};
+        false -> first_existing(Rest)
+    end.
+
+uri_to_path(<<"file://", Rest/binary>>) -> binary_to_list(Rest);
+uri_to_path(Bin) when is_binary(Bin)    -> binary_to_list(Bin);
+uri_to_path(Str) when is_list(Str)      -> Str.
+
+path_to_uri(Path) ->
+    unicode:characters_to_binary(["file://", Path]).
+
+location(Uri, Line) ->
+    L = max(0, Line - 1),
+    #{
+        <<"uri">>   => ensure_binary(Uri),
+        <<"range">> => #{
+            <<"start">> => #{<<"line">> => L, <<"character">> => 0},
+            <<"end">>   => #{<<"line">> => L, <<"character">> => 0}
+        }
+    }.
 
 %% ── Completions ───────────────────────────────────────────────────────────
 
