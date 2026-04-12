@@ -144,6 +144,63 @@ hover_returns_null_for_unknown_identifier_test() ->
     %% Hover on `M` (module name) — not a function we track
     ?assertEqual(null, winn_lsp:hover_at(Source, 0, 7)).
 
+%% ── Definition ───────────────────────────────────────────────────────────
+
+definition_local_function_test() ->
+    Source = "module M\n  def greet(name)\n    name\n  end\n  def main()\n    greet(\"hi\")\n  end\nend\n",
+    %% Cursor on `greet` at the call site (line 5, char 5)
+    Loc = winn_lsp:definition_at(<<"file:///tmp/m.winn">>, Source, 5, 5),
+    ?assertNotEqual(null, Loc),
+    ?assertEqual(<<"file:///tmp/m.winn">>, maps:get(<<"uri">>, Loc)),
+    Range = maps:get(<<"range">>, Loc),
+    Start = maps:get(<<"start">>, Range),
+    %% greet is defined on source line 2 → 0-indexed line 1
+    ?assertEqual(1, maps:get(<<"line">>, Start)).
+
+definition_returns_null_for_unknown_test() ->
+    Source = "module M\n  def f()\n    1\n  end\nend\n",
+    ?assertEqual(null, winn_lsp:definition_at(<<"file:///tmp/m.winn">>, Source, 0, 0)).
+
+definition_returns_null_for_stdlib_call_test() ->
+    %% Cursor on `puts` in `IO.puts(...)` — stdlib, no source to jump to
+    Source = "module M\n  def f()\n    IO.puts(\"hi\")\n  end\nend\n",
+    %% line 2 (0-indexed), `IO.puts(...)` starts at char 4: I=4 O=5 .=6 p=7 u=8 t=9 s=10
+    Loc = winn_lsp:definition_at(<<"file:///tmp/m.winn">>, Source, 2, 8),
+    ?assertEqual(null, Loc).
+
+definition_cross_file_test() ->
+    %% Set up a temp project: src/caller.winn calls Greeter.hello
+    %% with src/greeter.winn defining hello/0.
+    TmpDir = filename:join([
+        "/tmp",
+        "winn_lsp_test_" ++ integer_to_list(erlang:unique_integer([positive]))
+    ]),
+    SrcDir = filename:join(TmpDir, "src"),
+    ok = filelib:ensure_dir(filename:join(SrcDir, "x")),
+    GreeterPath = filename:join(SrcDir, "greeter.winn"),
+    CallerPath  = filename:join(SrcDir, "caller.winn"),
+    ok = file:write_file(GreeterPath,
+        "module Greeter\n  def hello()\n    \"hi\"\n  end\nend\n"),
+    CallerSrc = "module Caller\n  def main()\n    Greeter.hello()\n  end\nend\n",
+    ok = file:write_file(CallerPath, CallerSrc),
+    try
+        CallerUri = list_to_binary("file://" ++ CallerPath),
+        %% Cursor on `hello` in `Greeter.hello()` — line 2 (0-idx),
+        %% `    Greeter.hello()` → G=4 ... .=11 h=12 e=13...
+        Loc = winn_lsp:definition_at(CallerUri, CallerSrc, 2, 13),
+        ?assertNotEqual(null, Loc),
+        ExpectedUri = list_to_binary("file://" ++ GreeterPath),
+        ?assertEqual(ExpectedUri, maps:get(<<"uri">>, Loc)),
+        %% hello is defined on source line 2 of greeter.winn → 0-indexed 1
+        ?assertEqual(1, maps:get(<<"line">>,
+                                 maps:get(<<"start">>, maps:get(<<"range">>, Loc))))
+    after
+        file:delete(GreeterPath),
+        file:delete(CallerPath),
+        file:del_dir(SrcDir),
+        file:del_dir(TmpDir)
+    end.
+
 %% Lint should not be invoked when parsing fails (no spurious lint errors).
 lint_skipped_on_parse_error_test() ->
     Source = "module Bad\n  def main()\n    end end\n  end\nend\n",
