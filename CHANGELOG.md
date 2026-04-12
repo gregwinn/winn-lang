@@ -9,6 +9,10 @@ All notable changes to the Winn language are documented here.
 
 ### Developer Tooling
 - **LSP Phase 1 — lint diagnostics** — `winn lsp` now publishes lint warnings alongside compile errors. Each warning carries its rule name (e.g. `function_name_convention`) in the `code` field so editors can group and filter rules. Closing a document clears its diagnostics and removes it from the in-memory buffer. (#118)
+- **LSP Phase 2 — navigation** — `winn lsp` now supports outline panels, hover info, and go-to-definition. (#119)
+  - **`textDocument/documentSymbol`** — module/agent containers with function/import/alias children, mapped to LSP `SymbolKind`s.
+  - **`textDocument/hover`** — markdown signature (`**name/arity** — \`def name(params)\``) plus any consecutive `#` doc comments immediately preceding the def.
+  - **`textDocument/definition`** — local function calls jump to their def in the current file. `Module.fun()` calls resolve to `<lowercase_mod>.winn` under `src/`, `src/models/`, `src/controllers/`, or `src/tasks/`. Stdlib calls (IO, String, Enum, …) return null.
 
 ### Linter
 - **`unused_private_function`** rule — warns when a `private def` has no call sites in the same module.
