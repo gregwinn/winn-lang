@@ -511,22 +511,27 @@ flatten_pipe(Other) ->
     [Other].
 
 %% ── Operator precedence for parenthesization ────────────────────────────────
+%%
+%% Must stay aligned with the yecc precedence declarations in
+%% apps/winn/src/winn_parser.yrl. See issue #98.
 
-precedence('|>') -> 1;
-precedence('or') -> 2;
+precedence('|>')  -> 1;
+precedence('|>=') -> 1;
+precedence('or')  -> 2;
 precedence('and') -> 3;
-precedence('==') -> 4;
-precedence('!=') -> 4;
-precedence('<') -> 4;
-precedence('>') -> 4;
-precedence('<=') -> 4;
-precedence('>=') -> 4;
-precedence('+') -> 5;
-precedence('-') -> 5;
-precedence('<>') -> 5;
-precedence('*') -> 6;
-precedence('/') -> 6;
-precedence(_) -> 99.
+precedence('==')  -> 4;
+precedence('!=')  -> 4;
+precedence('<')   -> 4;
+precedence('>')   -> 4;
+precedence('<=')  -> 4;
+precedence('>=')  -> 4;
+precedence('+')   -> 5;
+precedence('-')   -> 5;
+precedence('<>')  -> 5;
+precedence('..')  -> 5;
+precedence('*')   -> 6;
+precedence('/')   -> 6;
+precedence(_)     -> 99.
 
 maybe_paren({op, _, ChildOp, _, _} = Expr, ParentOp, _Side, Indent) ->
     case precedence(ChildOp) < precedence(ParentOp) of
