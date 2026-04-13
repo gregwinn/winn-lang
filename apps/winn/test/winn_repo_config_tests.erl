@@ -67,3 +67,72 @@ configure_from_winn_test() ->
     ok = ModName:run(),
     ?assertEqual(<<"myhost">>, winn_config:get(repo, host)),
     ?assertEqual(<<"mydb">>, winn_config:get(repo, database)).
+
+%% ── Binary → charlist normalization for epgsql (#145) ──────────────────────
+
+normalize_epgsql_config_converts_binaries_to_charlists_test() ->
+    Config = #{
+        host     => <<"postgresql.databases.svc.cluster.local">>,
+        port     => 5432,
+        database => <<"myapp">>,
+        username => <<"postgres">>,
+        password => <<"secret">>
+    },
+    Normalized = winn_repo:normalize_epgsql_config(Config),
+    ?assertEqual("postgresql.databases.svc.cluster.local", maps:get(host, Normalized)),
+    ?assertEqual(5432, maps:get(port, Normalized)),
+    ?assertEqual("myapp", maps:get(database, Normalized)),
+    ?assertEqual("postgres", maps:get(username, Normalized)),
+    ?assertEqual("secret", maps:get(password, Normalized)).
+
+normalize_epgsql_config_passes_through_charlists_test() ->
+    Config = #{
+        host     => "localhost",
+        port     => 5432,
+        database => "winn_dev",
+        username => "postgres",
+        password => ""
+    },
+    Normalized = winn_repo:normalize_epgsql_config(Config),
+    ?assertEqual("localhost", maps:get(host, Normalized)),
+    ?assertEqual("winn_dev", maps:get(database, Normalized)),
+    ?assertEqual("postgres", maps:get(username, Normalized)),
+    ?assertEqual("", maps:get(password, Normalized)).
+
+normalize_epgsql_config_handles_atom_host_test() ->
+    Config = #{
+        host     => localhost,
+        port     => 5432,
+        database => <<"mydb">>,
+        username => <<"u">>,
+        password => <<"p">>
+    },
+    Normalized = winn_repo:normalize_epgsql_config(Config),
+    ?assertEqual("localhost", maps:get(host, Normalized)).
+
+normalize_epgsql_config_preserves_extra_keys_test() ->
+    %% epgsql supports ssl, ssl_opts, timeout, connect_timeout, etc.
+    %% The normalizer must not drop them.
+    Config = #{
+        host          => <<"db.example.com">>,
+        port          => 5432,
+        database      => <<"mydb">>,
+        username      => <<"u">>,
+        password      => <<"p">>,
+        ssl           => required,
+        ssl_opts      => [{verify, verify_peer}],
+        timeout       => 10000
+    },
+    Normalized = winn_repo:normalize_epgsql_config(Config),
+    ?assertEqual(required, maps:get(ssl, Normalized)),
+    ?assertEqual([{verify, verify_peer}], maps:get(ssl_opts, Normalized)),
+    ?assertEqual(10000, maps:get(timeout, Normalized)),
+    ?assertEqual("db.example.com", maps:get(host, Normalized)).
+
+normalize_epgsql_config_tolerates_missing_keys_test() ->
+    %% Exported function: callers may pass partial maps. Should not crash.
+    Config = #{host => <<"db.example.com">>, port => 5432},
+    Normalized = winn_repo:normalize_epgsql_config(Config),
+    ?assertEqual("db.example.com", maps:get(host, Normalized)),
+    ?assertEqual(5432, maps:get(port, Normalized)),
+    ?assertEqual(error, maps:find(database, Normalized)).

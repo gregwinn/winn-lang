@@ -7,7 +7,7 @@
     'query.new'/1, 'query.where'/3, 'query.limit'/2,
     'query.order_by'/3, 'query.select'/2, 'query.count'/1,
     sql_for_insert/2, sql_for_select/2,
-    build_where/1
+    build_where/1, normalize_epgsql_config/1
 ]).
 
 %% Configure the database connection from Winn:
@@ -69,11 +69,29 @@ connect() ->
         sqlite ->
             winn_repo_sqlite:connect(Config);
         _ ->
-            #{host := Host, port := Port, database := DB,
-              username := User, password := Pass} = Config,
-            epgsql:connect(#{host => Host, port => Port, database => DB,
-                             username => User, password => Pass})
+            epgsql:connect(normalize_epgsql_config(Config))
     end.
+
+%% Normalize a db config map into the shape epgsql expects.
+%% Winn code calls `Repo.configure(%{host: "...", ...})` which stores
+%% the values as binaries in ETS. epgsql forwards `host` to
+%% `gen_tcp:connect/4` which rejects binaries, so we must convert
+%% string-like fields to charlists before calling epgsql:connect/1.
+%%
+%% Normalizes in place so callers can pass additional epgsql options
+%% (ssl, ssl_opts, timeout, connect_timeout, ...) without losing them.
+normalize_epgsql_config(Config) when is_map(Config) ->
+    StringKeys = [host, database, username, password],
+    lists:foldl(fun(Key, Acc) ->
+        case maps:find(Key, Acc) of
+            {ok, V} -> Acc#{Key => to_charlist(V)};
+            error   -> Acc
+        end
+    end, Config, StringKeys).
+
+to_charlist(V) when is_binary(V) -> binary_to_list(V);
+to_charlist(V) when is_list(V)   -> V;
+to_charlist(V) when is_atom(V)   -> atom_to_list(V).
 
 adapter() ->
     maps:get(adapter, db_config(), postgres).

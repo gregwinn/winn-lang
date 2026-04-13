@@ -116,10 +116,7 @@ create_connections(Config, N) ->
     {Conns, Errors}.
 
 create_one(Config) ->
-    #{host := Host, port := Port, database := DB,
-      username := User, password := Pass} = Config,
-    epgsql:connect(#{host => Host, port => Port, database => DB,
-                     username => User, password => Pass}).
+    epgsql:connect(winn_repo:normalize_epgsql_config(Config)).
 
 is_alive(Conn) when is_pid(Conn) ->
     erlang:is_process_alive(Conn);
