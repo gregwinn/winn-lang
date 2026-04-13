@@ -1,0 +1,103 @@
+name: Update Homebrew Formula
+
+# When a GitHub release is published, update gregwinn/homebrew-winn
+# Formula/winn.rb to point to the new tag and source tarball sha256.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-homebrew:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute source tarball sha256
+        id: sha
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          URL="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
+          echo "Downloading $URL"
+
+          # GitHub generates source tarballs lazily — retry with backoff
+          # to avoid racing the release publish event. We must verify the
+          # downloaded file is actually a gzip tarball (not an HTML error
+          # page) before computing the hash, otherwise we could commit
+          # sha256("<html>404</html>") into the formula.
+          SHA=""
+          for attempt in 1 2 3 4 5 6; do
+            TMP=$(mktemp)
+            if curl -fsSL --retry 3 --retry-delay 2 "$URL" -o "$TMP"; then
+              # Gzip magic bytes: 1f 8b
+              MAGIC=$(head -c 2 "$TMP" | xxd -p)
+              if [ "$MAGIC" = "1f8b" ]; then
+                CANDIDATE=$(sha256sum "$TMP" | cut -d' ' -f1)
+                if [[ "$CANDIDATE" =~ ^[a-f0-9]{64}$ ]]; then
+                  SHA="$CANDIDATE"
+                  rm -f "$TMP"
+                  break
+                fi
+              else
+                echo "Attempt $attempt: got non-gzip response (magic=$MAGIC), tarball likely not ready"
+              fi
+            fi
+            rm -f "$TMP"
+            echo "Sleeping 10s before retry..."
+            sleep 10
+          done
+
+          if [ -z "$SHA" ]; then
+            echo "Failed to compute sha256 for $URL after 6 attempts" >&2
+            exit 1
+          fi
+
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Computed sha256: $SHA"
+
+      - name: Checkout homebrew-winn
+        uses: actions/checkout@v4
+        with:
+          repository: gregwinn/homebrew-winn
+          token: ${{ secrets.REPO_TOKEN }}
+          path: homebrew-winn
+
+      - name: Update formula
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          SHA: ${{ steps.sha.outputs.sha256 }}
+        run: |
+          cd homebrew-winn
+          FORMULA=Formula/winn.rb
+
+          # Replace the url line (any previous tag)
+          sed -i -E "s|archive/refs/tags/v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz|archive/refs/tags/${TAG}.tar.gz|" "$FORMULA"
+
+          # Replace the sha256 line (keep indentation)
+          sed -i -E "s|^(\s*sha256 )\"[a-f0-9]{64}\"|\1\"${SHA}\"|" "$FORMULA"
+
+          echo "--- updated formula ---"
+          cat "$FORMULA"
+          echo "--- end formula ---"
+
+      - name: Commit and push formula update
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          cd homebrew-winn
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/winn.rb
+          if git diff --cached --quiet; then
+            echo "Formula already up to date for $TAG — nothing to commit"
+          else
+            git commit -m "Update formula to ${TAG}"
+            git push
+          fi
