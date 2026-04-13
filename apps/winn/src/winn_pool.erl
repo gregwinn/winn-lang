@@ -37,6 +37,14 @@ status() ->
 %% ── GenServer callbacks ──────────────────────────────────────────────────────
 
 init(Config) ->
+    %% Trap exits so that links from failed epgsql:connect/1 attempts
+    %% (epgsql's internal gen_server terminates with the connect error
+    %% and propagates via the link) arrive as {'EXIT', Pid, Reason}
+    %% messages instead of killing the pool. Without this, a failed
+    %% initial connection attempt in create_connections/2 would take
+    %% down the whole pool with the connection's exit reason (e.g.
+    %% econnrefused) — flaky because of timing.
+    process_flag(trap_exit, true),
     PoolSize = maps:get(pool_size, Config, ?DEFAULT_POOL_SIZE),
     ConnConfig = maps:without([pool_size], Config),
     %% Create initial connections
