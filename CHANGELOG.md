@@ -2,6 +2,11 @@
 
 All notable changes to the Winn language are documented here.
 
+## [0.9.1] - Unreleased
+
+### Fixes
+- **`Repo.configure` with binary host now works** ([#145](https://github.com/gregwinn/winn-lang/issues/145)) — when Winn code called `Repo.configure(%{host: ...})` the map values were stored as binaries in ETS, and `winn_repo:connect/0` passed them directly to `epgsql:connect/1` → `gen_tcp:connect/4`, which rejects binary hosts with `badarg`. This broke any project reading `DB_HOST` from an env var (the scaffolder default pattern). Fixed by normalizing `host`, `database`, `username`, and `password` to charlists before handing the config to epgsql. The same normalization is applied in `winn_pool:create_one/1` for pooled connections.
+
 ## [0.9.0] - 2026-04-09
 
 ### Breaking Changes
