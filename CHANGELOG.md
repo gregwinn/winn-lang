@@ -2,6 +2,12 @@
 
 All notable changes to the Winn language are documented here.
 
+## [0.9.2] - 2026-04-12
+
+### Fixes
+- **`winn_pool` race: trap exits from failed epgsql connects** — `winn_pool:init/1` called `epgsql:connect/1` during startup to build the initial pool. On failure (e.g. `econnrefused` in CI with no database), `epgsql`'s internal `gen_server` terminated with the connect error reason and propagated via the link to `winn_pool`. Without `trap_exit`, the pool inherited that exit and died. The flakiness was masked before v0.9.1 because the earlier binary-host bug crashed `gen_tcp:connect/4` with `badarg` before reaching the link-exit path; fixing #145 unmasked the race. Set `process_flag(trap_exit, true)` in `winn_pool:init/1` so EXIT signals from failed connects become ignorable messages.
+- **Release infrastructure: nfpm asset URL** — the `build-linux-packages` job in `.github/workflows/release.yml` used the wrong nfpm asset name (`linux_amd64` vs the actual `Linux_x86_64`), which 404'd and caused the v0.9.1 `.deb`/`.rpm` builds to fail. Fixed the URL and added curl retry.
+
 ## [0.9.1] - 2026-04-12
 
 ### Fixes
