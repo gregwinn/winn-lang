@@ -1,16 +1,21 @@
 %% Winn Language Parser — Phase 2
 %% Adds: patterns in function params, multi-clause functions, match...end blocks.
 %%
-%% Precedence hierarchy (explicit grammar levels, no yecc prec declarations):
-%%   pipe  |>
-%%   or
-%%   and
-%%   not  (unary)
-%%   ==  !=  <  >  <=  >=
-%%   +  -  <>
-%%   *  /
-%%   unary -
-%%   primary (calls, literals, parens, match blocks)
+%% Precedence hierarchy (layered grammar + yecc precedence declarations):
+%%
+%%   |> |>=      (Left, 100)  pipes
+%%   or          (Left, 200)
+%%   and         (Left, 300)
+%%   not         (unary, handled via not_expr layer)
+%%   == != < > <= >=  (Nonassoc, 400)  — comparisons do NOT chain
+%%   + - <> ..   (Left, 500)
+%%   * /         (Left, 600)
+%%   unary -     (handled via unary_expr layer)
+%%   primary     (calls, literals, parens, match blocks)
+%%
+%% The layered nonterminals (pipe_expr → or_expr → ... → primary_expr)
+%% enforce grouping, and the `Left` / `Nonassoc` declarations below
+%% resolve shift/reduce conflicts at layer boundaries. See issue #98.
 
 Nonterminals
     program
@@ -54,6 +59,19 @@ Terminals
     '=' '.' ',' ':' '|'
     '%'
     '(' ')' '[' ']' '{' '}'.
+
+%% Operator precedence — resolves 50 of 53 shift/reduce conflicts.
+%% Higher number = tighter binding. yecc uses the rightmost terminal
+%% of a rule to determine that rule's precedence for conflict
+%% resolution. Conflicts not covered here (`do` in block_call,
+%% `(` in local_call/dot_call) are intentional structural cases
+%% documented in-file near their rules.
+Left        100 '|>' '|>='.
+Left        200 'or'.
+Left        300 'and'.
+Nonassoc    400 '==' '!=' '<' '>' '<=' '>='.
+Left        500 '+' '-' '<>' '..'.
+Left        600 '*' '/'.
 
 Rootsymbol program.
 
@@ -202,13 +220,18 @@ not_expr -> cmp_expr                       : '$1'.
 not_expr -> 'not' not_expr
     : {unary, line('$1'), 'not', '$2'}.
 
+%% Comparisons are non-associative: use `add_expr` on both sides so
+%% `a < b < c` cannot parse. The Nonassoc precedence declaration alone
+%% is insufficient because a left-recursive rule (`cmp_expr '==' add_expr`)
+%% natively chains without ever producing a shift/reduce conflict for
+%% Nonassoc to resolve.
 cmp_expr -> add_expr                       : '$1'.
-cmp_expr -> cmp_expr '==' add_expr  : {op, line('$2'), '==', '$1', '$3'}.
-cmp_expr -> cmp_expr '!=' add_expr  : {op, line('$2'), '!=', '$1', '$3'}.
-cmp_expr -> cmp_expr '<'  add_expr  : {op, line('$2'), '<',  '$1', '$3'}.
-cmp_expr -> cmp_expr '>'  add_expr  : {op, line('$2'), '>',  '$1', '$3'}.
-cmp_expr -> cmp_expr '<=' add_expr  : {op, line('$2'), '<=', '$1', '$3'}.
-cmp_expr -> cmp_expr '>=' add_expr  : {op, line('$2'), '>=', '$1', '$3'}.
+cmp_expr -> add_expr '==' add_expr  : {op, line('$2'), '==', '$1', '$3'}.
+cmp_expr -> add_expr '!=' add_expr  : {op, line('$2'), '!=', '$1', '$3'}.
+cmp_expr -> add_expr '<'  add_expr  : {op, line('$2'), '<',  '$1', '$3'}.
+cmp_expr -> add_expr '>'  add_expr  : {op, line('$2'), '>',  '$1', '$3'}.
+cmp_expr -> add_expr '<=' add_expr  : {op, line('$2'), '<=', '$1', '$3'}.
+cmp_expr -> add_expr '>=' add_expr  : {op, line('$2'), '>=', '$1', '$3'}.
 
 add_expr -> mul_expr                       : '$1'.
 add_expr -> add_expr '+' mul_expr   : {op, line('$2'), '+',  '$1', '$3'}.
@@ -283,6 +306,16 @@ match_clause -> 'err_kw' pattern '=>' match_clause_body
 match_clause_body -> expr expr_seq : ['$1' | '$2'].
 
 %% ── Function calls ─────────────────────────────────────────────────────────
+%%
+%% Intentional shift/reduce conflict (state 116): `ident` vs `ident '(' ...`.
+%% After seeing an ident, the parser can either reduce it to a `var`
+%% (via primary_expr) or shift `(` for a function call. yecc's default
+%% shift is correct — `foo(x)` is a call, not `foo` followed by `(x)`.
+%% This is a "longest match wins" structural case that would require
+%% factoring the common ident prefix to remove.
+%%
+%% Same pattern in state 201 for `ident '.' ident` → field_access vs
+%% dot_call: `a.b(x)` is a dot call, not `a.b` then `(x)`.
 
 call_expr -> local_call : '$1'.
 call_expr -> dot_call   : '$1'.
@@ -297,6 +330,12 @@ dot_call -> ident '.' ident '(' arg_list ')'
     : {dot_call, line('$1'), val('$1'), val('$3'), '$5'}.
 
 %% ── Block calls ──────────────────────────────────────────────────────────
+%%
+%% Intentional shift/reduce conflict (state 106): `call_expr` vs
+%% `call_expr 'do' ...`. After `foo()`, the parser can either reduce
+%% call_expr to primary_expr or shift `do` into a block_call. yecc's
+%% default shift is correct — `foo() do ... end` binds the block to
+%% the call. Would require factoring to resolve cleanly.
 
 block_call -> call_expr 'do' block_params expr_seq 'end'
     : {block_call, line('$2'), '$1', '$3', '$4'}.

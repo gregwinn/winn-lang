@@ -125,3 +125,87 @@ multi_expr_body_test() ->
     [Form] = parse("module M def f() 1 2 3 end end"),
     {module,_,'M',[{function,_,f,[],Body}]} = Form,
     ?assertEqual(3, length(Body)).
+
+%% ── Operator precedence (#98) ─────────────────────────────────────────────
+%%
+%% Regression tests for the yecc precedence declarations added to
+%% resolve 50 of 53 shift/reduce conflicts. These tests lock in the
+%% intended associativity and precedence so future grammar edits
+%% can't silently change it.
+
+%% Helper: parse a single expression out of a function body.
+parse_expr(Src) ->
+    [Form] = parse("module M def f() " ++ Src ++ " end end"),
+    {module,_,'M',[{function,_,f,[],[Expr]}]} = Form,
+    Expr.
+
+%% Helper: parse, expecting an error.
+parse_expecting_error(Src) ->
+    Full = "module M def f() " ++ Src ++ " end end",
+    {ok, RawTok, _} = winn_lexer:string(Full),
+    Tokens = winn_newline_filter:filter(RawTok),
+    winn_parser:parse(Tokens).
+
+arithmetic_precedence_test() ->
+    %% 1 + 2 * 3 must parse as 1 + (2 * 3)
+    Expr = parse_expr("1 + 2 * 3"),
+    ?assertMatch(
+        {op, _, '+',
+            {integer, _, 1},
+            {op, _, '*', {integer, _, 2}, {integer, _, 3}}},
+        Expr).
+
+arithmetic_left_assoc_test() ->
+    %% 1 - 2 - 3 must parse as (1 - 2) - 3, not 1 - (2 - 3)
+    Expr = parse_expr("1 - 2 - 3"),
+    ?assertMatch(
+        {op, _, '-',
+            {op, _, '-', {integer, _, 1}, {integer, _, 2}},
+            {integer, _, 3}},
+        Expr).
+
+mul_left_assoc_test() ->
+    %% 8 / 4 / 2 must parse as (8 / 4) / 2
+    Expr = parse_expr("8 / 4 / 2"),
+    ?assertMatch(
+        {op, _, '/',
+            {op, _, '/', {integer, _, 8}, {integer, _, 4}},
+            {integer, _, 2}},
+        Expr).
+
+logical_precedence_test() ->
+    %% a or b and c must parse as a or (b and c) — 'and' binds tighter
+    Expr = parse_expr("a or b and c"),
+    ?assertMatch(
+        {op, _, 'or',
+            {var, _, a},
+            {op, _, 'and', {var, _, b}, {var, _, c}}},
+        Expr).
+
+comparison_and_logical_test() ->
+    %% a == b and c must parse as (a == b) and c — '==' binds tighter
+    Expr = parse_expr("a == b and c"),
+    ?assertMatch(
+        {op, _, 'and',
+            {op, _, '==', {var, _, a}, {var, _, b}},
+            {var, _, c}},
+        Expr).
+
+pipe_with_or_test() ->
+    %% a |> b or c must parse as a |> (b or c) — 'or' binds tighter than '|>'
+    Expr = parse_expr("a |> b or c"),
+    ?assertMatch(
+        {pipe, _,
+            {var, _, a},
+            {op, _, 'or', {var, _, b}, {var, _, c}}},
+        Expr).
+
+chained_comparison_rejected_test() ->
+    %% a < b < c must produce a parse error (comparisons are non-associative)
+    Result = parse_expecting_error("a < b < c"),
+    ?assertMatch({error, _}, Result).
+
+chained_equality_rejected_test() ->
+    %% a == b == c must produce a parse error
+    Result = parse_expecting_error("a == b == c"),
+    ?assertMatch({error, _}, Result).

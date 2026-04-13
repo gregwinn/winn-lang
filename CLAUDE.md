@@ -96,7 +96,7 @@ Use unique module names in each test to avoid beam cache collisions.
 - Switch and rescue clause bodies are **single expressions** unless wrapped in `do...end` (no newline tokens)
 - The `%` token requires `\%` escaping in the leex `.xrl` file
 - `ok` and `err` are reserved keywords (`ok_kw`, `err_kw`) — cannot be used as map keys or identifiers
-- Shift/reduce conflicts exist (currently ~52) but 0 reduce/reduce
+- Shift/reduce conflicts: 3 remaining, all intentional structural "longest-match wins" cases documented inline near `block_call`, `local_call`, and `dot_call`. Operator precedence is now declared via `Left`/`Nonassoc` in `winn_parser.yrl` (#98). Comparisons (`==`, `!=`, `<`, `>`, `<=`, `>=`) are non-associative — `a < b < c` is a parse error. 0 reduce/reduce.
 
 ## Naming Conventions
 

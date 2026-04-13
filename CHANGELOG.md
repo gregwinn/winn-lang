@@ -4,6 +4,12 @@ All notable changes to the Winn language are documented here.
 
 ## [Unreleased]
 
+### Breaking Changes
+- **Chained comparisons are now a parse error** — `a < b < c`, `a == b == c`, etc. used to parse silently as `(a < b) < c` (comparing a bool against a number). They now produce a parse error. The comparison rules in `winn_parser.yrl` were tightened from `cmp_expr -> cmp_expr OP add_expr` (left-recursive, allowing chains) to `cmp_expr -> add_expr OP add_expr` (one comparison only). No `.winn` source in the repo or any winn-* package used this pattern. (#98)
+
+### Compiler
+- **Parser shift/reduce conflicts: 53 → 3** — Added explicit `Left`/`Nonassoc` precedence declarations to `winn_parser.yrl` for every operator (`|>`, `|>=`, `or`, `and`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `+`, `-`, `<>`, `..`, `*`, `/`). yecc auto-resolves 50 of the 53 historical conflicts. The 3 remaining are intentional "longest-match wins" structural cases (`foo() do end` binding the block to the call, `ident(args)` being a call rather than a var followed by parens, and the same for `a.b(args)`) and are now documented inline next to the relevant rules. The formatter's hardcoded precedence ladder in `winn_formatter.erl` was extended to cover `..` and `|>=` to stay aligned with the parser. (#98)
+
 ### Language
 - **`private def`** — module-private functions. Functions declared with `private def name(...)` are callable from within the same module but excluded from the module's export list, so cross-module calls raise `undef`. Mirrors the existing `async def` modifier-before-`def` style. Multi-clause and guarded variants both supported. (#128)
 
