@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```sh
 rebar3 compile              # Compile everything
-rebar3 eunit                # Run all 537 tests
+rebar3 eunit                # Run all 642 tests
 rebar3 eunit --module=winn_l1_tests  # Run a single test module
 rebar3 escriptize           # Build the winn CLI escript
 ./_build/default/bin/winn help       # Verify CLI works

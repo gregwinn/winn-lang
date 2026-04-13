@@ -1,8 +1,8 @@
 # Winn Roadmap
 
-## Current Status — v0.9.0
+## Current Status — v0.9.1
 
-635 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics. LSP with inline errors and autocomplete.
+642 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics. LSP with inline errors and autocomplete.
 
 ### What's Shipped
 
@@ -17,6 +17,7 @@
 | v0.7.0 | Core Stdlib + Packages | File I/O, Regex, Timer, Retry, DateTime/String, package system (`winn add`/`winn remove`), [winn-redis](https://github.com/gregwinn/winn-redis), [winn-mongodb](https://github.com/gregwinn/winn-mongodb), [winn-amqp](https://github.com/gregwinn/winn-amqp) |
 | v0.8.0 | Web Framework + Agents | Static files, CORS, auth middleware, health checks, `agent` keyword with `@state` syntax and `async def`, compiles to GenServer |
 | v0.9.0 | Developer Tooling | `winn fmt`, `winn lint` (10 rules), `winn lsp` (diagnostics + autocomplete), improved `winn new` (--api, --minimal), command shortcuts, codegen split |
+| v0.9.1 | Bug fix | `Repo.configure` binary host crashing epgsql connect ([#145](https://github.com/gregwinn/winn-lang/issues/145)) |
 
 ---
 
