@@ -70,7 +70,11 @@ jobs:
 
       - name: Install nfpm
         run: |
-          curl -sfL https://github.com/goreleaser/nfpm/releases/download/v2.41.1/nfpm_2.41.1_linux_amd64.tar.gz | tar xz -C /usr/local/bin nfpm
+          # Asset is nfpm_<version>_Linux_x86_64.tar.gz (capital L, x86_64)
+          curl -sfL --retry 3 --retry-delay 5 \
+            https://github.com/goreleaser/nfpm/releases/download/v2.41.1/nfpm_2.41.1_Linux_x86_64.tar.gz \
+            | sudo tar xz -C /usr/local/bin nfpm
+          nfpm --version
 
       - name: Extract version
         id: version
