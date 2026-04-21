@@ -693,3 +693,4 @@ Packages are written in Winn and declared in `package.json`. Anyone can create a
 - [ORM](orm.md) — Schema, Repo, Changeset
 - [Modules](modules.md) — HTTP server/client, JWT, WebSockets, Tasks, Config
 - [CLI Reference](cli.md) — all CLI commands
+- [Deploying to Production](deployment.md) — BEAM sizing, JSON logging, Prometheus, SIGTERM drain, Kubernetes manifests, Dockerfile
