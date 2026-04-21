@@ -1,5 +1,10 @@
 -module(winn_timer).
--export([every/3, 'after'/3, cancel/1]).
+-export([every/3, 'after'/3, cancel/1, sleep/1]).
+
+%% Timer.sleep(Ms) — block the calling process.
+sleep(Ms) when is_integer(Ms), Ms >= 0 ->
+    timer:sleep(Ms),
+    ok.
 
 %% Timer.every(N, :seconds/:ms, Fun)
 every(N, Unit, Fun) when is_function(Fun, 0) ->

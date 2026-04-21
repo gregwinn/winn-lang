@@ -38,6 +38,10 @@ Rules.
 %% Keywords — must appear before the identifier catch-all
 module                      : {token, {'module', TokenLine}}.
 agent                       : {token, {'agent', TokenLine}}.
+pipeline                    : {token, {'pipeline', TokenLine}}.
+producer                    : {token, {'producer', TokenLine}}.
+processor                   : {token, {'processor', TokenLine}}.
+batcher                     : {token, {'batcher', TokenLine}}.
 async                       : {token, {'async', TokenLine}}.
 private                     : {token, {'private', TokenLine}}.
 def                         : {token, {'def', TokenLine}}.

@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```sh
 rebar3 compile              # Compile everything
-rebar3 eunit                # Run all 537 tests
+rebar3 eunit                # Run all 668 tests
 rebar3 eunit --module=winn_l1_tests  # Run a single test module
 rebar3 escriptize           # Build the winn CLI escript
 ./_build/default/bin/winn help       # Verify CLI works
@@ -59,6 +59,7 @@ All AST nodes are tagged tuples: `{Tag, Line, ...fields}`. No records. Key shape
 - `Logger` → `winn_logger`, `Crypto` → `winn_crypto`, `JSON` → `winn_json`
 - `HTTP` → `winn_http`, `Server` → `winn_server`, `Config` → `winn_config`
 - `Task` → `winn_task`, `JWT` → `winn_jwt`, `WS` → `winn_ws`
+- `Pipeline` → `winn_pipeline` (Broadway-shape dataflow runtime, backs the `pipeline` keyword)
 - `GenServer` → `gen_server`, `Supervisor` → `supervisor` (direct OTP)
 - `Winn` → `winn_runtime` (for `to_string` in interpolation)
 - Fallback: lowercase the module name

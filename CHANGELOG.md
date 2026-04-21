@@ -5,7 +5,11 @@ All notable changes to the Winn language are documented here.
 ## [Unreleased]
 
 ### Language
+- **`pipeline` keyword** — Broadway-shape supervised multi-stage dataflow. Declare a `producer`, one `processor` (with configurable `concurrency`, `retry`, and per-message `timeout`), and an optional `batcher` (size + timeout flushing). Compiles to a supervisor tree with prefetch-driven backpressure, graceful drain on shutdown, and metrics published through the `Metrics` module. User-written producer modules implement a four-callback behaviour (`init/1`, `pull/2`, `ack/3`, `terminate/2`). See [docs/otp.md](docs/otp.md#pipeline). VS Code grammar update for `pipeline`, `producer`, `processor`, and `batcher` keywords will follow in a separate `language-winn-vscode` release. (#104)
 - **`private def`** — module-private functions. Functions declared with `private def name(...)` are callable from within the same module but excluded from the module's export list, so cross-module calls raise `undef`. Mirrors the existing `async def` modifier-before-`def` style. Multi-clause and guarded variants both supported. (#128)
+
+### Stdlib
+- **`Timer.sleep(ms)`** — block the calling process for `ms` milliseconds. Useful in top-level scripts that need to keep the VM alive after kicking off supervisor-backed work (e.g. `pipeline` demos).
 
 ### Developer Tooling
 - **LSP Phase 1 — lint diagnostics** — `winn lsp` now publishes lint warnings alongside compile errors. Each warning carries its rule name (e.g. `function_name_convention`) in the `code` field so editors can group and filter rules. Closing a document clears its diagnostics and removes it from the in-memory buffer. (#118)
