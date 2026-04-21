@@ -22,6 +22,7 @@ Nonterminals
     top_forms top_form
     module_def module_body dotted_name
     agent_def agent_body agent_item agent_state_decl agent_function_def
+    pipeline_def pipeline_body pipeline_stage pipeline_opts pipeline_opt
     use_directive import_directive alias_directive
     function_def struct_def struct_fields protocol_def impl_def protocol_fns param_list pattern_list
     expr_seq
@@ -43,7 +44,7 @@ Nonterminals
 
 %% Phase 1 terminals + Phase 2 additions.
 Terminals
-    'module' 'agent' 'async' 'private' 'def' 'struct' 'protocol' 'impl' 'do' 'end' 'use' 'import' 'alias' 'schema' 'field'
+    'module' 'agent' 'pipeline' 'producer' 'processor' 'batcher' 'async' 'private' 'def' 'struct' 'protocol' 'impl' 'do' 'end' 'use' 'import' 'alias' 'schema' 'field'
     'match' 'ok_kw' 'err_kw' 'nil_kw'
     'if' 'else' 'switch' 'when' 'try' 'rescue'
     'fn' 'for' 'in'
@@ -84,6 +85,7 @@ top_forms -> top_form top_forms : ['$1' | '$2'].
 
 top_form -> module_def : '$1'.
 top_form -> agent_def  : '$1'.
+top_form -> pipeline_def : '$1'.
 
 %% ── Agent ────────────────────────────────────────────────────────────────────
 
@@ -111,6 +113,35 @@ agent_function_def -> 'def' ident '(' param_list ')' 'when' expr expr_seq 'end'
 %% Async (cast) function: async def log(msg) ... end
 agent_function_def -> 'async' 'def' ident '(' param_list ')' expr_seq 'end'
     : {agent_cast_fn, line('$1'), val('$3'), '$5', '$7'}.
+
+%% ── Pipeline ────────────────────────────────────────────────────────────────
+%% Broadway-shape supervised multi-stage dataflow:
+%%     pipeline Name
+%%       producer  :atom, key: value, ...
+%%       processor :atom, key: value, ... do |msg| body end
+%%       batcher   :atom, key: value, ... do |batch| body end
+%%     end
+
+pipeline_def -> 'pipeline' dotted_name pipeline_body 'end'
+    : {pipeline, line('$1'), '$2', '$3'}.
+
+pipeline_body -> '$empty'                          : [].
+pipeline_body -> pipeline_stage pipeline_body      : ['$1' | '$2'].
+
+pipeline_stage -> 'producer' atom_lit pipeline_opts
+    : {stage, line('$1'), producer, val('$2'), '$3', nobody}.
+
+pipeline_stage -> 'processor' atom_lit pipeline_opts 'do' block_params expr_seq 'end'
+    : {stage, line('$1'), processor, val('$2'), '$3', {'$5', '$6'}}.
+
+pipeline_stage -> 'batcher' atom_lit pipeline_opts 'do' block_params expr_seq 'end'
+    : {stage, line('$1'), batcher, val('$2'), '$3', {'$5', '$6'}}.
+
+%% Options are `, key: value` repeated. Empty list allowed.
+pipeline_opts -> '$empty'                           : [].
+pipeline_opts -> ',' pipeline_opt pipeline_opts     : ['$2' | '$3'].
+
+pipeline_opt -> ident ':' expr : {val('$1'), '$3'}.
 
 %% ── Module ─────────────────────────────────────────────────────────────────
 

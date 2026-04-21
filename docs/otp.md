@@ -66,6 +66,98 @@ IO.puts(Counter.value(counter))   # prints 100
 
 Use `agent` when you want clean stateful actors with minimal code. Use `use Winn.GenServer` when you need full control over OTP callbacks, custom `handle_info`, or process linking.
 
+## Pipeline
+
+The `pipeline` keyword builds Broadway-shape supervised dataflows: a single producer feeds a pool of concurrent processors, which can optionally funnel results into a batcher. Each stage is its own gen_server, the whole pipeline lives under one supervisor, and backpressure is driven by the producer's prefetch count.
+
+### Defining a Pipeline
+
+```winn
+pipeline FleetDelivery
+  producer :amqp,
+    source: FleetAmqpProducer,
+    queue: "fleet.events",
+    prefetch: 50
+
+  processor :default,
+    concurrency: 10,
+    retry: 3,
+    timeout: 5000 do |msg|
+    FleetService.process(msg)
+  end
+
+  batcher :mongo,
+    size: 100,
+    timeout: 1000 do |batch|
+    MongoClient.bulk_upsert(batch)
+  end
+end
+```
+
+### Using a Pipeline
+
+```winn
+FleetDelivery.start_link()   # starts the supervisor tree
+FleetDelivery.stats()        # %{processed: N, errors: N, retries: N, ...}
+FleetDelivery.stop()         # graceful drain
+```
+
+### The Producer Behaviour
+
+Pipelines don't ship with any built-in source — you write a module that implements a four-function callback set. Keep the module simple; the pipeline runtime handles supervision, metrics, and backpressure around it.
+
+| Callback | Purpose | Return |
+|---|---|---|
+| `init(opts)` | Open the upstream source (AMQP channel, DB cursor, file handle). | `{:ok, state}` or `{:error, reason}` |
+| `pull(state, demand)` | Fetch up to `demand` messages. Return fewer (or `[]`) if you want the runtime to retry after a short backoff. | `{:ok, messages, state}` or `{:error, reason, state}` |
+| `ack(state, message, outcome)` | Acknowledge a completed message upstream. `outcome` is `:ack` or `{:nack, reason}`. | new `state` |
+| `terminate(state, reason)` | Close the source cleanly. | `:ok` |
+
+All `opts` besides the framework keys (`source`, `prefetch`) pass through to `init/1` as a map.
+
+### Stage Options
+
+- `producer`:
+  - `source:` — **required**. The module implementing the producer behaviour.
+  - `prefetch:` — max messages in flight across the worker pool (default `10`).
+  - any other `key: value` pair is forwarded to `init/1`.
+- `processor`:
+  - `concurrency:` — number of parallel workers (default `1`).
+  - `retry:` — retry count on handler failure (default `0`, no retry).
+  - `timeout:` — per-message timeout in milliseconds (default `infinity`).
+- `batcher` (optional stage):
+  - `size:` — flush threshold (default `100`).
+  - `timeout:` — idle flush in milliseconds (default `1000`).
+
+### Supervision & Shutdown
+
+A pipeline `FleetDelivery` compiles to a supervisor whose tree looks like:
+
+```
+fleetdelivery (one_for_all)
+├── fleetdelivery_batcher      (optional)
+├── fleetdelivery_worker_1
+├── ...
+├── fleetdelivery_worker_N
+└── fleetdelivery_producer
+```
+
+On `stop/0` or SIGTERM the supervisor terminates children in reverse order — the producer stops pulling first, workers finish in-flight messages, and the batcher flushes any buffered items before exiting. Pending casts are drained from the batcher's mailbox before the final flush, so nothing sitting between stages gets lost.
+
+### Metrics
+
+The pipeline emits counters and a gauge through the `Metrics` module. Keys are namespaced by the pipeline's module name:
+
+- `<pipeline>.processed`
+- `<pipeline>.errors`
+- `<pipeline>.retries`
+- `<pipeline>.batch_flushes`
+- `<pipeline>.in_flight` (gauge)
+
+### Pipeline vs Raw GenServer + Task
+
+Reach for `pipeline` when you need Broadway semantics: bounded concurrency, prefetch backpressure, per-stage supervision, and clean shutdown — without hand-rolling a worker pool and drain protocol. Drop down to `use Winn.GenServer` + `Task.async_stream` when you need a push-based interface, multi-stage dispatch, or topologies the Broadway shape doesn't cover.
+
 ## GenServer
 
 A GenServer is a stateful process that handles synchronous calls and asynchronous casts.

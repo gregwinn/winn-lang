@@ -124,6 +124,42 @@ transform_form({agent, Line, Name, Items}) ->
               ++ [DefaultInfo, DefaultTerm],
     transform_form({module, Line, Name, ModuleBody});
 
+%% ── Pipeline: Broadway-style supervised dataflow ────────────────────────────
+%%
+%%   pipeline Name
+%%     producer  :atom, source: Mod, opt: val, ...
+%%     processor :atom, concurrency: N, retry: R, timeout: T do |msg| body end
+%%     batcher   :atom, size: S, timeout: T do |batch| body end
+%%   end
+%%
+%% Desugars to a supervisor module whose init/1 returns the sup flags and
+%% child specs produced by winn_pipeline:init/3. One handler function per
+%% processor/batcher stage holds the user's do-block body.
+transform_form({pipeline, Line, Name, Stages}) ->
+    {Producer, Processor, MaybeBatcher} = split_pipeline_stages(Stages, Line),
+    ModAtom = lower_module_atom(Name),
+
+    {ProcHandlerName, ProcHandlerFn} = gen_pipeline_handler(Processor, process),
+    {BatcherHandlerName, BatcherHandlerFns} =
+        case MaybeBatcher of
+            none -> {none, []};
+            _    -> {N, Fn} = gen_pipeline_handler(MaybeBatcher, batch), {N, [Fn]}
+        end,
+
+    SpecFn = gen_pipeline_spec_fn(Line, ModAtom,
+                                  Producer, Processor, ProcHandlerName,
+                                  MaybeBatcher, BatcherHandlerName),
+    StartLinkFn = gen_pipeline_wrapper(Line, start_link, ModAtom, true),
+    StopFn      = gen_pipeline_wrapper(Line, stop,       ModAtom, false),
+    StatsFn     = gen_pipeline_wrapper(Line, stats,      ModAtom, false),
+    InitFn      = gen_pipeline_init_fn(Line, ModAtom),
+    BehavAttr   = {behaviour_attr, Line, supervisor},
+
+    ModuleBody = [BehavAttr,
+                  StartLinkFn, StopFn, StatsFn, InitFn,
+                  SpecFn, ProcHandlerFn | BatcherHandlerFns],
+    transform_form({module, Line, Name, ModuleBody});
+
 transform_form(Other) ->
     Other.
 
@@ -170,6 +206,93 @@ expand_use(Line, 'Winn', 'Test', _ModName) ->
     {behaviour_only, Attr};
 expand_use(_Line, 'Winn', 'Schema', _ModName) ->
     {schema_use, none}.
+
+%% ── Pipeline helper functions ────────────────────────────────────────────
+
+%% Partition stages; enforce exactly 1 producer, 1 processor, 0..1 batcher.
+split_pipeline_stages(Stages, Line) ->
+    Producers  = [S || S = {stage, _, producer,  _, _, _} <- Stages],
+    Processors = [S || S = {stage, _, processor, _, _, _} <- Stages],
+    Batchers   = [S || S = {stage, _, batcher,   _, _, _} <- Stages],
+    case {length(Producers), length(Processors), length(Batchers)} of
+        {1, 1, BC} when BC =< 1 -> ok;
+        {0, _, _} -> erlang:error({pipeline_missing_producer, Line});
+        {_, 0, _} -> erlang:error({pipeline_missing_processor, Line});
+        {P, _, _} when P > 1 -> erlang:error({pipeline_multiple_producers, Line});
+        {_, P, _} when P > 1 -> erlang:error({pipeline_multiple_processors, Line});
+        {_, _, B} when B > 1 -> erlang:error({pipeline_multiple_batchers, Line})
+    end,
+    [Producer]  = Producers,
+    [Processor] = Processors,
+    MaybeBatcher = case Batchers of [] -> none; [Bat] -> Bat end,
+    {Producer, Processor, MaybeBatcher}.
+
+%% Emit a single-arg handler function holding the user's do-block body.
+%% Kind = process | batch; drives the generated name.
+gen_pipeline_handler({stage, L, Kind, Name, _Opts, Body}, ExpectedKind) ->
+    case {Kind, ExpectedKind} of
+        {processor, process} -> ok;
+        {batcher,   batch}   -> ok;
+        _ -> erlang:error({pipeline_handler_kind_mismatch, L, Kind, ExpectedKind})
+    end,
+    Prefix = case ExpectedKind of process -> "__pipeline_process_"; batch -> "__pipeline_batch_" end,
+    HandlerName = list_to_atom(Prefix ++ atom_to_list(Name) ++ "__"),
+    {BlockParams, BlockBody} = case Body of
+        {Ps, Bs} -> {Ps, Bs};
+        _ -> erlang:error({pipeline_handler_missing_body, L})
+    end,
+    Params = case BlockParams of
+        []      -> [{pat_wildcard, L}];
+        [P]     -> [P];
+        _       -> erlang:error({pipeline_handler_bad_arity, L})
+    end,
+    FinalBody = case BlockBody of [] -> [{atom, L, ok}]; _ -> BlockBody end,
+    Fn = {function, L, HandlerName, Params, FinalBody},
+    {HandlerName, Fn}.
+
+%% pipeline_spec/0 returns a map describing all stages.
+%% Producer opts pass through verbatim (runtime extracts framework keys).
+%% Processor/batcher spec gets {module, handler} for apply-based dispatch.
+gen_pipeline_spec_fn(L, ModAtom, Producer, Processor, ProcHandlerName, MaybeBatcher, BatcherHandlerName) ->
+    ProducerMap  = producer_spec_map(L, Producer),
+    ProcessorMap = worker_spec_map(L, ModAtom, Processor, ProcHandlerName),
+    BaseEntries  = [{producer, ProducerMap}, {processor, ProcessorMap}],
+    Entries = case MaybeBatcher of
+        none -> BaseEntries;
+        _    -> BaseEntries ++ [{batcher, worker_spec_map(L, ModAtom, MaybeBatcher, BatcherHandlerName)}]
+    end,
+    {function, L, pipeline_spec, [], [{map, L, Entries}]}.
+
+producer_spec_map(L, {stage, _, producer, Name, Opts, _}) ->
+    Entries = [{name, {atom, L, Name}} | Opts],
+    {map, L, Entries}.
+
+worker_spec_map(L, ModAtom, {stage, _, _Kind, Name, Opts, _}, HandlerName) ->
+    Entries = [{name, {atom, L, Name}},
+               {module, {atom, L, ModAtom}},
+               {handler, {atom, L, HandlerName}} | Opts],
+    {map, L, Entries}.
+
+%% start_link/0 -> Pipeline.start_link(:mod, pipeline_spec())
+%% stop/0       -> Pipeline.stop(:mod)
+%% stats/0      -> Pipeline.stats(:mod)
+%% WithSpec = true adds pipeline_spec() as second arg.
+gen_pipeline_wrapper(L, FnName, ModAtom, WithSpec) ->
+    Args = [{atom, L, ModAtom}] ++ case WithSpec of
+        true  -> [{call, L, pipeline_spec, []}];
+        false -> []
+    end,
+    Body = [{dot_call, L, 'Pipeline', FnName, Args}],
+    {function, L, FnName, [], Body}.
+
+%% init/1 -> Pipeline.init(:mod, pipeline_spec(), Args)
+gen_pipeline_init_fn(L, ModAtom) ->
+    Body = [{dot_call, L, 'Pipeline', init, [
+        {atom, L, ModAtom},
+        {call, L, pipeline_spec, []},
+        {var, L, args}
+    ]}],
+    {function, L, init, [{var, L, args}], Body}.
 
 %% ── Agent helper functions ──────────────────────────────────────────────
 

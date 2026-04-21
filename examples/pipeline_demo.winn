@@ -1,0 +1,69 @@
+#| Pipeline keyword demo — Broadway-shape supervised dataflow.
+   Run with: winn run examples/pipeline_demo.winn
+
+   Uses an in-memory list producer that emits a fixed set of integers,
+   then returns [] on subsequent pulls. A 2-worker processor doubles
+   each value, and a size=4 batcher prints each flushed batch.
+|#
+
+module Main
+  def main()
+    IO.puts("Starting DemoPipeline...")
+    DemoPipeline.start_link()
+    Timer.sleep(2000)
+    IO.puts("Stats:")
+    IO.inspect(DemoPipeline.stats())
+    DemoPipeline.stop()
+    IO.puts("Done.")
+  end
+end
+
+pipeline DemoPipeline
+  producer :src,
+    source: ListProducer,
+    items: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    prefetch: 4
+
+  processor :double,
+    concurrency: 2 do |n|
+    n * 2
+  end
+
+  batcher :print,
+    size: 4,
+    timeout: 500 do |batch|
+    IO.puts("flushed batch:")
+    IO.inspect(batch)
+  end
+end
+
+module ListProducer
+  def init(opts)
+    items = Map.get(:items, opts)
+    agent_ref = ListProducerState.start(%{queue: items})
+    {:ok, agent_ref}
+  end
+
+  def pull(pid, _demand)
+    items = ListProducerState.drain(pid)
+    {:ok, items, pid}
+  end
+
+  def ack(pid, _msg, _outcome)
+    pid
+  end
+
+  def terminate(_pid, _reason)
+    :ok
+  end
+end
+
+agent ListProducerState
+  state queue = []
+
+  def drain()
+    items = @queue
+    @queue = []
+    items
+  end
+end
