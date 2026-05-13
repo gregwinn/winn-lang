@@ -332,6 +332,73 @@ data.count  # => 5
 
 ---
 
+## Metrics
+
+Counters, gauges, histograms, and HTTP request stats. ETS-backed for concurrent reads with no locking. Combine with `winn_logger` to get observability comparable to a typical production OTP service.
+
+Call `Metrics.enable()` once at app start (the CLI's `start` command does this automatically) before recording metrics.
+
+### `Metrics.increment(name)` / `Metrics.increment(name, amount)`
+Increment a counter. `amount` defaults to 1.
+```winn
+Metrics.increment(:requests)
+Metrics.increment(:bytes_sent, 1024)
+```
+
+### `Metrics.set(name, value)`
+Set a gauge to an absolute value.
+```winn
+Metrics.set(:queue_depth, 42)
+```
+
+### `Metrics.observe(name, value)`
+Record a sample in a histogram (e.g. for latency tracking). The most recent 1000 samples are retained per name.
+```winn
+Metrics.observe(:request_ms, 12.5)
+```
+
+### `Metrics.time(name, fun)`
+Time the execution of a zero-arity lambda and `observe` the elapsed milliseconds. Returns the lambda's result.
+```winn
+result = Metrics.time(:db_query, fn -> Repo.all(User) end)
+```
+
+### `Metrics.get(name)`
+Read a counter or gauge by name. Returns `0` if not found.
+```winn
+Metrics.get(:requests)  # => 42
+```
+
+### `Metrics.snapshot()`
+Return a map with all counters, gauges, and histogram summaries (`p50`, `p95`, `p99`, `count`, `avg`, `min`, `max`).
+```winn
+%{counters: counters, gauges: gauges, histograms: hist} = Metrics.snapshot()
+```
+
+### `Metrics.beam_stats()`
+Process count, memory breakdown, atom counts, scheduler count, and uptime — useful for runtime diagnostics dashboards.
+
+### `Metrics.prometheus()`
+Render the full metrics state as a Prometheus v0.0.4 text exposition binary. Wire it into a `/metrics` endpoint with one line:
+
+```winn
+module MyApp.Router
+  use Winn.Router
+
+  def routes()
+    [{:get, "/metrics", :metrics}]
+  end
+
+  def metrics(conn)
+    Server.text(conn, Metrics.prometheus())
+  end
+end
+```
+
+Output covers counters, gauges, histograms (as Prometheus summaries with `quantile="0.5|0.95|0.99"` labels), per-endpoint HTTP stats (`http_requests_total`, `http_errors_total`, `http_request_duration_ms`), and BEAM gauges (`beam_process_count`, `beam_memory_*_bytes`, `beam_uptime_ms`). Float values use 3-decimal compact form. See [deployment.md](deployment.md) for the full Prometheus + Kubernetes wiring.
+
+---
+
 ## Type Conversions
 
 These are available as bare function calls anywhere in Winn code:

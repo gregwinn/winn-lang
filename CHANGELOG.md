@@ -16,6 +16,7 @@ All notable changes to the Winn language are documented here.
 
 ### Stdlib
 - **`Timer.sleep(ms)`** — block the calling process for `ms` milliseconds. Useful in top-level scripts that need to keep the VM alive after kicking off supervisor-backed work (e.g. `pipeline` demos).
+- **`Metrics.prometheus()`** — render the current metrics state as a Prometheus v0.0.4 text exposition binary. Counters, gauges, histograms (as summaries with `quantile="0.5|0.95|0.99"` labels), per-endpoint HTTP stats (`http_requests_total`, `http_errors_total`, `http_request_duration_ms`), and BEAM gauges (`beam_process_count`, `beam_memory_*_bytes`, `beam_uptime_ms`) all emit valid exposition format with `# TYPE` preambles. Float values use 3-decimal compact form. Lets a `/metrics` endpoint be one line of Winn (`Server.text(conn, Metrics.prometheus())`) — replaces the ~50-line Erlang exporter previously documented in the deployment guide. (#156)
 
 ### Developer Tooling
 - **LSP Phase 1 — lint diagnostics** — `winn lsp` now publishes lint warnings alongside compile errors. Each warning carries its rule name (e.g. `function_name_convention`) in the `code` field so editors can group and filter rules. Closing a document clears its diagnostics and removes it from the in-memory buffer. (#118)
