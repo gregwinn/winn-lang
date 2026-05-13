@@ -661,7 +661,13 @@ resp.status # => 200
 resp.body   # => decoded JSON map
 ```
 
-This is syntactic sugar for `maps:get(field, map)`.
+Missing keys return `nil` rather than raising:
+
+```winn
+user.email  # => nil  (key not present in the map)
+```
+
+This is syntactic sugar for `maps:get(field, map, nil)`.
 
 ## Type Conversion Builtins
 

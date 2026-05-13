@@ -6,6 +6,7 @@ All notable changes to the Winn language are documented here.
 
 ### Breaking Changes
 - **Chained comparisons are now a parse error** — `a < b < c`, `a == b == c`, etc. used to parse silently as `(a < b) < c` (comparing a bool against a number). They now produce a parse error. The comparison rules in `winn_parser.yrl` were tightened from `cmp_expr -> cmp_expr OP add_expr` (left-recursive, allowing chains) to `cmp_expr -> add_expr OP add_expr` (one comparison only). No `.winn` source in the repo or any winn-* package used this pattern. (#98)
+- **`List.first/1` and `List.last/1` return `nil` on empty lists** — previously returned the atom `:not_found`. Callers matching on `:not_found` must switch to `nil` (or `case` on both during migration). The new return type aligns with Map.get and field access for a single "missing" sentinel across the stdlib. (#58)
 
 ### Compiler
 - **Parser shift/reduce conflicts: 53 → 3** — Added explicit `Left`/`Nonassoc` precedence declarations to `winn_parser.yrl` for every operator (`|>`, `|>=`, `or`, `and`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `+`, `-`, `<>`, `..`, `*`, `/`). yecc auto-resolves 50 of the 53 historical conflicts. The 3 remaining are intentional "longest-match wins" structural cases (`foo() do end` binding the block to the call, `ident(args)` being a call rather than a var followed by parens, and the same for `a.b(args)`) and are now documented inline next to the relevant rules. The formatter's hardcoded precedence ladder in `winn_formatter.erl` was extended to cover `..` and `|>=` to stay aligned with the parser. (#98)
@@ -18,6 +19,11 @@ All notable changes to the Winn language are documented here.
 ### Stdlib
 - **`Timer.sleep(ms)`** — block the calling process for `ms` milliseconds. Useful in top-level scripts that need to keep the VM alive after kicking off supervisor-backed work (e.g. `pipeline` demos).
 - **`Metrics.prometheus()`** — render the current metrics state as a Prometheus v0.0.4 text exposition binary. Counters, gauges, histograms (as summaries with `quantile="0.5|0.95|0.99"` labels), per-endpoint HTTP stats (`http_requests_total`, `http_errors_total`, `http_request_duration_ms`), and BEAM gauges (`beam_process_count`, `beam_memory_*_bytes`, `beam_uptime_ms`) all emit valid exposition format with `# TYPE` preambles. Float values use 3-decimal compact form. Lets a `/metrics` endpoint be one line of Winn (`Server.text(conn, Metrics.prometheus())`) — replaces the ~50-line Erlang exporter previously documented in the deployment guide. (#156)
+- **Runtime bounds checking and safe defaults** — stdlib calls that used to raise on edge cases now return sentinel values instead, so production code paths can match on `nil` / `{error, …}` rather than wrapping every call in a try/rescue. (#58)
+  - `List.first([])` / `List.last([])` → `nil` (was `:not_found`, see Breaking Changes)
+  - `Map.get(key, map)` → `nil` for missing keys; `{error, :not_a_map}` when the second argument isn't a map
+  - `String.slice(str, start, len)` → `""` for out-of-range start, negative start, negative length, or non-binary input (previously crashed with badarg)
+  - Map field access `user.name` → `nil` when the key is missing (previously raised `{badkey, …}`); compiles to `maps:get(field, map, nil)`
 
 ### Developer Tooling
 - **LSP Phase 1 — lint diagnostics** — `winn lsp` now publishes lint warnings alongside compile errors. Each warning carries its rule name (e.g. `function_name_convention`) in the `code` field so editors can group and filter rules. Closing a document clears its diagnostics and removes it from the in-memory buffer. (#118)
