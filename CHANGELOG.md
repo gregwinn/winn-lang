@@ -30,6 +30,9 @@ All notable changes to the Winn language are documented here.
 ### Tooling
 - **`winn docs`** — generated API docs now skip private functions.
 
+### Documentation
+- **Production deployment guide** — new `docs/deployment.md` covering BEAM scheduler sizing against Kubernetes CPU limits, `ERL_FLAGS` recipes, structured JSON logging with `Logger` plus Promtail/Loki + Datadog wiring, a drop-in Prometheus `/metrics` handler built on `Metrics.snapshot()`/`http_snapshot()`/`beam_stats()`, SIGTERM drain via OTP with the readiness-flip `preStop` pattern, a complete Kubernetes Deployment + Service + Ingress template (incl. 1Password Operator), a multi-stage Dockerfile with a non-root runtime image, and a merge-ready pre-flight checklist. Linked from `docs/getting-started.md`. (#153)
+
 ## [0.9.0] - 2026-04-09
 
 ### Breaking Changes
