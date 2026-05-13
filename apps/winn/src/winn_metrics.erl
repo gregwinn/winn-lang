@@ -7,7 +7,7 @@
          observe/2, time/2,
          get/1, snapshot/0, reset/1, reset_all/0,
          http_snapshot/0, record_http/4,
-         beam_stats/0]).
+         beam_stats/0, prometheus/0]).
 
 -define(COUNTERS, winn_metrics_counters).
 -define(GAUGES, winn_metrics_gauges).
@@ -198,6 +198,88 @@ beam_stats() ->
       atom_limit => erlang:system_info(atom_limit),
       scheduler_count => erlang:system_info(schedulers),
       uptime_ms => erlang:monotonic_time(millisecond) - erlang:system_info(start_time)}.
+
+%% ── Prometheus Exposition Format ────────────────────────────────────────────
+%% Renders the current metrics state as a Prometheus v0.0.4 text exposition
+%% binary suitable for serving from a /metrics endpoint.
+
+prometheus() ->
+    Snap = snapshot(),
+    Http = http_snapshot(),
+    Beam = beam_stats(),
+    Lines =
+        counter_lines(maps:get(counters, Snap, #{}))
+        ++ gauge_lines(maps:get(gauges, Snap, #{}))
+        ++ histogram_lines(maps:get(histograms, Snap, #{}))
+        ++ http_lines(Http)
+        ++ beam_lines(Beam),
+    iolist_to_binary([lists:join($\n, Lines), $\n]).
+
+counter_lines(M) ->
+    maps:fold(fun(K, V, Acc) ->
+        N = prom_bin(K),
+        Acc ++ [<<"# TYPE ", N/binary, " counter">>,
+                <<N/binary, " ", (prom_bin(V))/binary>>]
+    end, [], M).
+
+gauge_lines(M) ->
+    maps:fold(fun(K, V, Acc) ->
+        N = prom_bin(K),
+        Acc ++ [<<"# TYPE ", N/binary, " gauge">>,
+                <<N/binary, " ", (prom_bin(V))/binary>>]
+    end, [], M).
+
+histogram_lines(M) ->
+    maps:fold(fun(K, Summary, Acc) ->
+        N = prom_bin(K),
+        P50 = prom_bin(maps:get(p50, Summary, 0)),
+        P95 = prom_bin(maps:get(p95, Summary, 0)),
+        P99 = prom_bin(maps:get(p99, Summary, 0)),
+        Cnt = prom_bin(maps:get(count, Summary, 0)),
+        Acc ++ [
+            <<"# TYPE ", N/binary, " summary">>,
+            <<N/binary, "{quantile=\"0.5\"} ",  P50/binary>>,
+            <<N/binary, "{quantile=\"0.95\"} ", P95/binary>>,
+            <<N/binary, "{quantile=\"0.99\"} ", P99/binary>>,
+            <<N/binary, "_count ", Cnt/binary>>
+        ]
+    end, [], M).
+
+http_lines(M) when map_size(M) =:= 0 -> [];
+http_lines(M) ->
+    Endpoints = maps:fold(fun(Key, Stats, Acc) ->
+        Label = <<"endpoint=\"", Key/binary, "\"">>,
+        Acc ++ [
+            <<"http_requests_total{", Label/binary, "} ",
+              (prom_bin(maps:get(count, Stats)))/binary>>,
+            <<"http_errors_total{",   Label/binary, "} ",
+              (prom_bin(maps:get(errors, Stats)))/binary>>,
+            <<"http_request_duration_ms{", Label/binary, ",quantile=\"0.95\"} ",
+              (prom_bin(maps:get(p95_ms, Stats)))/binary>>
+        ]
+    end, [], M),
+    [<<"# TYPE http_requests_total counter">>,
+     <<"# TYPE http_errors_total counter">>,
+     <<"# TYPE http_request_duration_ms summary">>] ++ Endpoints.
+
+beam_lines(B) ->
+    [
+        <<"# TYPE beam_process_count gauge">>,
+        <<"beam_process_count ",          (prom_bin(maps:get(process_count, B)))/binary>>,
+        <<"# TYPE beam_memory_total_bytes gauge">>,
+        <<"beam_memory_total_bytes ",     (prom_bin(maps:get(memory_total, B)))/binary>>,
+        <<"# TYPE beam_memory_processes_bytes gauge">>,
+        <<"beam_memory_processes_bytes ", (prom_bin(maps:get(memory_processes, B)))/binary>>,
+        <<"# TYPE beam_memory_ets_bytes gauge">>,
+        <<"beam_memory_ets_bytes ",       (prom_bin(maps:get(memory_ets, B)))/binary>>,
+        <<"# TYPE beam_uptime_ms gauge">>,
+        <<"beam_uptime_ms ",              (prom_bin(maps:get(uptime_ms, B)))/binary>>
+    ].
+
+prom_bin(V) when is_binary(V)  -> V;
+prom_bin(V) when is_atom(V)    -> atom_to_binary(V, utf8);
+prom_bin(V) when is_integer(V) -> integer_to_binary(V);
+prom_bin(V) when is_float(V)   -> float_to_binary(V, [{decimals, 3}, compact]).
 
 %% ── Internal ────────────────────────────────────────────────────────────────
 
