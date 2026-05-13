@@ -102,8 +102,8 @@ preload                     : {token, {'preload', TokenLine}}.
 %% Triple-quoted string (multi-line, can contain unescaped quotes, strips leading whitespace)
 \"\"\"(.|\n)*\"\"\"         : make_triple_string_token(TokenLine, TokenChars).
 
-%% String literal (double-quoted, supports #{expr} interpolation)
-\"[^\"]*\"                  : make_string_token(TokenLine, TokenChars).
+%% String literal (double-quoted, supports #{expr} interpolation and backslash escapes)
+\"(\\.|[^\"\\])*\"          : make_string_token(TokenLine, TokenChars).
 
 %% Uppercase identifier = module name reference (Blog, IO, String, etc.)
 {UC}{AN}*                   : {token, {module_name, TokenLine, list_to_atom(TokenChars)}}.
@@ -250,6 +250,7 @@ unescape([]) -> [];
 unescape([$\\, $n  | Rest]) -> [$\n | unescape(Rest)];
 unescape([$\\, $t  | Rest]) -> [$\t | unescape(Rest)];
 unescape([$\\, $r  | Rest]) -> [$\r | unescape(Rest)];
+unescape([$\\, $0  | Rest]) -> [0   | unescape(Rest)];
 unescape([$\\, $\\ | Rest]) -> [$\\ | unescape(Rest)];
 unescape([$\\, $"  | Rest]) -> [$"  | unescape(Rest)];
 unescape([C        | Rest]) -> [C   | unescape(Rest)].

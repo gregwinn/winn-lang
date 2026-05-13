@@ -51,6 +51,13 @@ string_concat_test() ->
     Result = fmt(Source),
     ?assert(string:find(Result, "\"a\" <> \"b\"") =/= nomatch).
 
+%% Escapes survive a fmt round-trip (#157).
+string_escape_roundtrip_test() ->
+    Source = "module Foo\n  def bar()\n    \"he said \\\"hi\\\"\"\n  end\nend\n",
+    Result = fmt(Source),
+    ?assert(string:find(Result, "\"he said \\\"hi\\\"\"") =/= nomatch),
+    ?assertEqual(Result, fmt(Result)).
+
 %% ── Pipe chain alignment ────────────────────────────────────────────────
 
 pipe_chain_test() ->

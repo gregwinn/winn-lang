@@ -576,6 +576,7 @@ escape_string([]) -> [];
 escape_string([$\n | Rest]) -> "\\n" ++ escape_string(Rest);
 escape_string([$\t | Rest]) -> "\\t" ++ escape_string(Rest);
 escape_string([$\r | Rest]) -> "\\r" ++ escape_string(Rest);
+escape_string([0   | Rest]) -> "\\0" ++ escape_string(Rest);
 escape_string([$\\ | Rest]) -> "\\\\" ++ escape_string(Rest);
 escape_string([$" | Rest]) -> "\\\"" ++ escape_string(Rest);
 escape_string([C | Rest]) -> [C | escape_string(Rest)].
