@@ -79,3 +79,33 @@ triple_string_interpolation_test() ->
         "  end\n"
         "end\n"),
     ?assertEqual(<<"hello Alice!">>, Mod:run()).
+
+%% ── String escape end-to-end (#157) ─────────────────────────────────────────
+
+string_escape_compiles_test() ->
+    Mod = compile_and_load(
+        "module EscapeComp\n"
+        "  def run()\n"
+        "    \"he said \\\"hi\\\"\"\n"
+        "  end\n"
+        "end\n"),
+    ?assertEqual(<<"he said \"hi\"">>, Mod:run()).
+
+string_escape_prometheus_test() ->
+    Mod = compile_and_load(
+        "module EscapeProm\n"
+        "  def run()\n"
+        "    \"http_requests_total{endpoint=\\\"GET /users\\\"} 42\"\n"
+        "  end\n"
+        "end\n"),
+    ?assertEqual(<<"http_requests_total{endpoint=\"GET /users\"} 42">>, Mod:run()).
+
+string_escape_interpolated_compiles_test() ->
+    Mod = compile_and_load(
+        "module EscapeInterp\n"
+        "  def run()\n"
+        "    name = \"Alice\"\n"
+        "    \"#{name} said \\\"hi\\\"\"\n"
+        "  end\n"
+        "end\n"),
+    ?assertEqual(<<"Alice said \"hi\"">>, Mod:run()).

@@ -75,6 +75,39 @@ string_escape_test() ->
     [{string_lit, 1, Val}] = lex("\"hi\\nthere\""),
     ?assertEqual(<<"hi\nthere">>, Val).
 
+%% Each supported escape decodes to the expected byte. Source uses Erlang
+%% string syntax, so `\\\"` is the two-char Winn source `\"`.
+string_escape_dquote_test() ->
+    [{string_lit, 1, Val}] = lex("\"he said \\\"hi\\\"\""),
+    ?assertEqual(<<"he said \"hi\"">>, Val).
+
+string_escape_backslash_test() ->
+    [{string_lit, 1, Val}] = lex("\"a\\\\b\""),
+    ?assertEqual(<<"a\\b">>, Val).
+
+string_escape_tab_test() ->
+    [{string_lit, 1, Val}] = lex("\"a\\tb\""),
+    ?assertEqual(<<"a\tb">>, Val).
+
+string_escape_cr_test() ->
+    [{string_lit, 1, Val}] = lex("\"a\\rb\""),
+    ?assertEqual(<<"a\rb">>, Val).
+
+string_escape_null_test() ->
+    [{string_lit, 1, Val}] = lex("\"a\\0b\""),
+    ?assertEqual(<<"a", 0, "b">>, Val).
+
+%% Interpolated strings route through the same unescape helper.
+string_escape_in_interpolation_test() ->
+    Tokens = lex("\"#{name} said \\\"hi\\\"\""),
+    [{interp_string, 1, Parts}] = Tokens,
+    ?assertMatch([{expr, "name"}, {str, <<" said \"hi\"">>}], Parts).
+
+%% Prometheus exposition format — the use case that motivated the issue.
+string_prometheus_label_test() ->
+    [{string_lit, 1, Val}] = lex("\"http_requests_total{endpoint=\\\"GET /users\\\"} 42\""),
+    ?assertEqual(<<"http_requests_total{endpoint=\"GET /users\"} 42">>, Val).
+
 atom_lit_test() ->
     ?assertMatch([{atom_lit, 1, ok}],    lex(":ok")).
 

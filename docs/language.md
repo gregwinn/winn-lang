@@ -215,6 +215,28 @@ IO.puts("#{to_string(1 + 2)} is three")
 
 Escape `#` with a backslash to prevent interpolation: `"\#{not interpolated}"`
 
+#### Escape Sequences
+
+Double-quoted strings support the following backslash escapes:
+
+| Escape | Character             |
+|--------|-----------------------|
+| `\"`   | double quote          |
+| `\\`   | backslash             |
+| `\n`   | newline (LF)          |
+| `\r`   | carriage return       |
+| `\t`   | tab                   |
+| `\0`   | null byte             |
+
+```winn
+"he said \"hi\""                      # => he said "hi"
+"http_requests{method=\"GET\"} 42"    # Prometheus exposition format
+"line one\nline two"
+"path\\to\\file"
+```
+
+Unknown escape sequences (e.g. `\q`) pass through literally — the backslash is preserved. If you don't want to escape anything, use [triple-quoted strings](#triple-quoted-strings) instead.
+
 ### Atoms
 
 Atoms are prefixed with `:`:
