@@ -170,12 +170,16 @@
 
 'string.slice'(Bin, Start, Length) when is_binary(Bin), is_integer(Start), is_integer(Length) ->
     Size = byte_size(Bin),
-    case Start >= Size of
+    ClampedStart = max(0, Start),
+    ClampedLen   = max(0, Length),
+    case ClampedStart >= Size of
         true  -> <<>>;
         false ->
-            ActualLen = min(Length, Size - Start),
-            binary:part(Bin, Start, ActualLen)
-    end.
+            ActualLen = min(ClampedLen, Size - ClampedStart),
+            binary:part(Bin, ClampedStart, ActualLen)
+    end;
+'string.slice'(_NotBinary, _Start, _Length) ->
+    <<>>.
 
 %% ── Enum ─────────────────────────────────────────────────────────────────
 
@@ -256,15 +260,11 @@ join_binaries([H | T], Sep) ->
 
 %% ── List ─────────────────────────────────────────────────────────────────
 
-'list.first'([]) ->
-    not_found;
-'list.first'([H | _]) ->
-    H.
+'list.first'([])      -> nil;
+'list.first'([H | _]) -> H.
 
-'list.last'([]) ->
-    not_found;
-'list.last'(List) when is_list(List) ->
-    lists:last(List).
+'list.last'([])                       -> nil;
+'list.last'(List) when is_list(List)  -> lists:last(List).
 
 'list.length'(List) when is_list(List) ->
     length(List).
@@ -284,7 +284,8 @@ join_binaries([H | T], Sep) ->
 %% ── Map ────────────────────────────────────────────────────────────────────
 
 'map.merge'(Map1, Map2) -> maps:merge(Map1, Map2).
-'map.get'(Key, Map)     -> maps:get(Key, Map).
+'map.get'(Key, Map) when is_map(Map) -> maps:get(Key, Map, nil);
+'map.get'(_Key, _Other)              -> {error, not_a_map}.
 'map.put'(Key, Val, Map) -> maps:put(Key, Val, Map).
 'map.keys'(Map)          -> maps:keys(Map).
 'map.values'(Map)        -> maps:values(Map).

@@ -62,6 +62,7 @@ String.ends_with?("hello", "lo")    # => true
 ```winn
 String.slice("hello world", 6, 5)  # => "world"
 ```
+Out-of-range start, negative start, negative length, or a non-binary input return `""` rather than crashing.
 
 ### `String.to_integer(str)` / `String.to_float(str)`
 Parse strings to numbers.
@@ -130,7 +131,7 @@ Map then flatten one level.
 ## List
 
 ### `List.first(list)` / `List.last(list)`
-Return the first/last element, or `:not_found` for empty lists.
+Return the first/last element, or `nil` for empty lists.
 
 ### `List.length(list)`
 Return the number of elements.
@@ -158,7 +159,7 @@ Map.merge(%{a: 1}, %{b: 2})  # => %{a: 1, b: 2}
 ```
 
 ### `Map.get(key, map)`
-Get a value by key.
+Get a value by key. Returns `nil` if the key is missing, or `{error, :not_a_map}` if the second argument is not a map.
 
 ### `Map.put(key, value, map)`
 Return a new map with the key set.

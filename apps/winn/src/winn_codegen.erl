@@ -202,10 +202,11 @@ gen_expr({range, _Line, From, To}) ->
     cerl:c_call(cerl:c_atom(lists), cerl:c_atom(seq),
                 [gen_expr(From), gen_expr(To)]);
 
-%% Map field access: user.name => maps:get(name, User)
+%% Map field access: user.name => maps:get(name, User, nil)
+%% Missing keys return nil instead of crashing with {badkey, _}.
 gen_expr({field_access, _Line, Expr, Field}) ->
     cerl:c_call(cerl:c_atom(maps), cerl:c_atom(get),
-                [cerl:c_atom(Field), gen_expr(Expr)]);
+                [cerl:c_atom(Field), gen_expr(Expr), cerl:c_atom(nil)]);
 
 gen_expr(Unknown) ->
     error({unsupported_ast_node, Unknown}).
