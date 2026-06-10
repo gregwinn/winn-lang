@@ -2,6 +2,11 @@
 
 All notable changes to the Winn language are documented here.
 
+## [0.9.3] - 2026-06-10
+
+### Fixes
+- **Repeated `_` wildcard in a function head or pattern now compiles** ([#170](https://github.com/gregwinn/winn-lang/issues/170)) — codegen emitted the literal Core Erlang variable `'_'` for every wildcard, so any head/pattern with more than one (e.g. `def head_or([x | _], _)`) was rejected by `core_lint` with `{duplicate_var,'_',...}`. Each `_` is now freshened to a distinct anonymous variable, matching Erlang semantics where repeated `_` is valid. Affects `gen_param`/`gen_pattern` in `winn_codegen_pattern.erl`.
+
 ## [0.9.2] - 2026-04-12
 
 ### Fixes
