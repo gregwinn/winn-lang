@@ -364,6 +364,142 @@ Possible errors: `:invalid_signature`, `:expired`, `:invalid_token`, `:malformed
 
 ---
 
+## Auth
+
+A small service layer over `Crypto` (password hashing), `JWT` (tokens), and `Repo`
+(persistence) for email/password login. It does the register/login/current-user
+dance so your handlers stay a few lines. Tokens are Bearer JWTs; the `[:auth]`
+middleware (see [Middleware](#middleware)) verifies them and attaches the claims.
+
+### User schema convention
+
+`Auth` expects a schema named `user` (a `schema "users"` block) with at least an
+`email` and a `password_hash`. `verified` and `created_at` are recommended:
+
+```winn
+module User
+  use Winn.Schema
+
+  schema "users" do
+    field :email, :string
+    field :password_hash, :string
+    field :verified, :boolean
+    field :created_at, :integer
+  end
+end
+```
+
+Set the JWT signing secret (and, optionally, the access-token TTL in seconds) in
+config once at startup:
+
+```winn
+Config.put(:auth, :secret, System.get_env("JWT_SECRET"))
+Config.put(:auth, :access_token_ttl, 3600)   # optional, default 3600
+```
+
+### `Auth.register(email, password)`
+
+Hashes the password and inserts a user. Returns the created user **without** the
+password hash. Fails with `:email_taken` if the email already exists.
+
+```winn
+match Auth.register("alice@example.com", "hunter2")
+  ok user => Server.json(conn, user, 201)
+  err :email_taken => Server.json(conn, %{error: "email taken"}, 409)
+  err _ => Server.json(conn, %{error: "could not register"}, 422)
+end
+```
+
+### `Auth.login(email, password)`
+
+Verifies the password and, on success, returns the user plus a signed access
+token. A wrong password and an unknown email both return `:invalid_credentials`
+(and take similar time) so attackers can't probe which emails exist.
+
+```winn
+match Auth.login("alice@example.com", "hunter2")
+  ok result => Server.json(conn, result)   # %{user: ..., access_token: "..."}
+  err :invalid_credentials => Server.json(conn, %{error: "invalid login"}, 401)
+end
+```
+
+### `Auth.current_user(conn)`
+
+Resolves the authenticated user from the conn. The `[:auth]` middleware verifies
+the `Authorization: Bearer <token>` header and attaches the claims; this loads the
+user named by the token's `user_id`.
+
+```winn
+match Auth.current_user(conn)
+  ok user => Server.json(conn, user)
+  err :unauthenticated => Server.json(conn, %{error: "unauthorized"}, 401)
+end
+```
+
+### Putting it together — a router
+
+```winn
+module Api.Router
+  use Winn.Router
+
+  def routes()
+    [
+      {:post, "/auth/register", :register},
+      {:post, "/auth/login",    :login},
+      {:get,  "/api/me",        :me}
+    ]
+  end
+
+  def middleware()
+    [:cors, :auth]
+  end
+
+  def auth_config()
+    %{secret: Config.get(:auth, :secret), exclude: ["/auth/login", "/auth/register"]}
+  end
+
+  def register(conn)
+    params = Server.body_params(conn)
+    match Auth.register(params.email, params.password)
+      ok user => Server.json(conn, user, 201)
+      err reason => Server.json(conn, %{error: reason}, 422)
+    end
+  end
+
+  def login(conn)
+    params = Server.body_params(conn)
+    match Auth.login(params.email, params.password)
+      ok result => Server.json(conn, result)
+      err _ => Server.json(conn, %{error: "invalid login"}, 401)
+    end
+  end
+
+  def me(conn)
+    match Auth.current_user(conn)
+      ok user => Server.json(conn, user)
+      err _ => Server.json(conn, %{error: "unauthorized"}, 401)
+    end
+  end
+end
+```
+
+A JS frontend logs in, then sends the token on protected requests:
+
+```js
+const { access_token } = await (await fetch("/auth/login", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ email, password }),
+})).json();
+
+await fetch("/api/me", { headers: { Authorization: `Bearer ${access_token}` } });
+```
+
+> Refresh tokens, logout/revocation, and cookie sessions build on this in later
+> releases. This is the core access-token flow.
+
+---
+
 ## WebSockets
 
 WebSocket client powered by [gun](https://github.com/ninenines/gun). Supports `ws://` and `wss://`.
