@@ -7,7 +7,7 @@
     'query.new'/1, 'query.where'/3, 'query.limit'/2,
     'query.order_by'/3, 'query.select'/2, 'query.count'/1,
     sql_for_insert/2, sql_for_select/2,
-    build_where/1
+    build_where/1, row_to_map_cols/2
 ]).
 
 %% Configure the database connection from Winn:
@@ -143,7 +143,7 @@ insert(SchemaMod, Attrs) ->
     {SQL, Vals} = sql_for_insert(SchemaMod, Attrs),
     with_conn(fun(Conn) ->
         case epgsql:equery(Conn, binary_to_list(SQL), Vals) of
-            {ok, _Cols, [Row | _]} -> {ok, row_to_map(SchemaMod, Row)};
+            {ok, Cols, [Row | _]} -> {ok, row_to_map_cols(Cols, Row)};
             {ok, _Cols, []}        -> {error, not_found};
             {error, Reason}        -> {error, Reason}
         end
@@ -154,7 +154,7 @@ get(SchemaMod, Id) ->
     SQL   = iolist_to_binary(["SELECT * FROM ", Table, " WHERE id = $1 LIMIT 1"]),
     with_conn(fun(Conn) ->
         case epgsql:equery(Conn, binary_to_list(SQL), [Id]) of
-            {ok, _Cols, [Row | _]} -> {ok, row_to_map(SchemaMod, Row)};
+            {ok, Cols, [Row | _]} -> {ok, row_to_map_cols(Cols, Row)};
             {ok, _Cols, []}        -> {error, not_found};
             {error, Reason}        -> {error, Reason}
         end
@@ -166,7 +166,7 @@ get(SchemaMod, Field, Value) ->
     SQL   = iolist_to_binary(["SELECT * FROM ", Table, " WHERE ", Col, " = $1 LIMIT 1"]),
     with_conn(fun(Conn) ->
         case epgsql:equery(Conn, binary_to_list(SQL), [Value]) of
-            {ok, _Cols, [Row | _]} -> {ok, row_to_map(SchemaMod, Row)};
+            {ok, Cols, [Row | _]} -> {ok, row_to_map_cols(Cols, Row)};
             {ok, _Cols, []}        -> {error, not_found};
             {error, Reason}        -> {error, Reason}
         end
@@ -274,7 +274,7 @@ update(#{id := Id} = Struct) ->
                                        " RETURNING *"]),
             with_conn(fun(Conn) ->
                 case epgsql:equery(Conn, binary_to_list(SQL), Vals) of
-                    {ok, _Cols, [Row | _]} -> {ok, row_to_map(SchemaMod, Row)};
+                    {ok, Cols, [Row | _]} -> {ok, row_to_map_cols(Cols, Row)};
                     {ok, _Cols, []}        -> {error, not_found};
                     {error, Reason}        -> {error, Reason}
                 end
@@ -353,11 +353,9 @@ with_conn(Fun) ->
             end
     end.
 
-row_to_map(SchemaMod, Row) ->
-    Fields = SchemaMod:'__schema__'(fields),
-    Values = tuple_to_list(Row),
-    maps:from_list(lists:zip(Fields, lists:sublist(Values, length(Fields)))).
-
+%% Map a result row to a map using the result-set's column metadata, so the
+%% DB-managed `id` column is included and values land under the right keys
+%% regardless of how the schema declares its fields (#172).
 row_to_map_cols(Cols, Row) ->
     ColNames = [binary_to_atom(element(2, C), utf8) || C <- Cols],
     Values   = tuple_to_list(Row),
