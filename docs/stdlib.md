@@ -336,6 +336,36 @@ end
 
 ---
 
+## Auth
+
+Email/password login built on `Crypto`, `JWT`, and `Repo`. Expects a `user` schema
+with `email` and `password_hash` fields and a signing secret in config
+(`Config.put(:auth, :secret, ...)`). See the [Auth guide](modules.md#auth) for the
+full router + frontend example.
+
+### `Auth.register(email, password)`
+Hash the password and create a user. Returns the user (without `password_hash`),
+or `{:error, :email_taken}`.
+```winn
+Auth.register("alice@example.com", "hunter2")
+```
+
+### `Auth.login(email, password)`
+Verify credentials and return `%{user: ..., access_token: token}`, or
+`{:error, :invalid_credentials}` (same error for wrong password and unknown email).
+```winn
+Auth.login("alice@example.com", "hunter2")
+```
+
+### `Auth.current_user(conn)`
+Resolve the authenticated user from the conn's verified JWT claims (attached by the
+`[:auth]` middleware). Returns the user or `{:error, :unauthenticated}`.
+```winn
+Auth.current_user(conn)
+```
+
+---
+
 ## JSON
 
 ### `JSON.encode(term)`
