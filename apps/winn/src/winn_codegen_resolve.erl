@@ -35,6 +35,7 @@ resolve_dot_call('DateTime', Fun) ->
     {winn_runtime, list_to_atom("datetime." ++ atom_to_list(Fun))};
 resolve_dot_call('Logger', Fun)  -> {winn_logger, Fun};
 resolve_dot_call('Crypto', Fun)  -> {winn_crypto, Fun};
+resolve_dot_call('Auth', Fun)    -> {winn_auth, Fun};
 resolve_dot_call('HTTP', Fun)    -> {winn_http, Fun};
 resolve_dot_call('Config', Fun)  -> {winn_config, Fun};
 resolve_dot_call('Task', Fun)    -> {winn_task, Fun};
