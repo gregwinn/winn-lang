@@ -73,7 +73,9 @@ auth_config_with_exclude_compiles_test() ->
 setup_auth() ->
     winn_config:put(auth, repo_module, winn_auth_fake_repo),
     winn_config:put(auth, user_schema, user),
+    winn_config:put(auth, token_schema, auth_token),
     winn_config:put(auth, secret, <<"test_secret">>),
+    winn_config:put(auth, refresh_token_ttl, nil),  %% default; reset per test
     winn_auth_fake_repo:reset().
 
 register_returns_sanitized_user_test() ->
@@ -136,6 +138,52 @@ login_missing_secret_test() ->
     ?assertEqual({error, missing_secret},
                  winn_auth:login(<<"eve@example.com">>, <<"pw">>)).
 
+%% ── Refresh tokens / revocation ──────────────────────────────────────────────
+
+login_returns_refresh_token_test() ->
+    setup_auth(),
+    {ok, _} = winn_auth:register(<<"ivan@example.com">>, <<"pw">>),
+    {ok, L} = winn_auth:login(<<"ivan@example.com">>, <<"pw">>),
+    ?assert(is_binary(maps:get(access_token, L))),
+    ?assert(is_binary(maps:get(refresh_token, L))).
+
+refresh_rotates_and_invalidates_old_test() ->
+    setup_auth(),
+    {ok, _} = winn_auth:register(<<"frank@example.com">>, <<"pw">>),
+    {ok, L}  = winn_auth:login(<<"frank@example.com">>, <<"pw">>),
+    RT1 = maps:get(refresh_token, L),
+    {ok, R} = winn_auth:refresh(RT1),
+    RT2 = maps:get(refresh_token, R),
+    ?assert(is_binary(maps:get(access_token, R))),
+    ?assertNotEqual(RT1, RT2),
+    %% Old token is single-use — rotated away.
+    ?assertEqual({error, invalid_token}, winn_auth:refresh(RT1)),
+    %% New token works.
+    ?assertMatch({ok, _}, winn_auth:refresh(RT2)).
+
+logout_revokes_refresh_token_test() ->
+    setup_auth(),
+    {ok, _} = winn_auth:register(<<"grace@example.com">>, <<"pw">>),
+    {ok, L} = winn_auth:login(<<"grace@example.com">>, <<"pw">>),
+    RT = maps:get(refresh_token, L),
+    ?assertEqual(ok, winn_auth:logout(RT)),
+    ?assertEqual({error, invalid_token}, winn_auth:refresh(RT)),
+    %% Idempotent.
+    ?assertEqual(ok, winn_auth:logout(RT)).
+
+refresh_expired_token_test() ->
+    setup_auth(),
+    winn_config:put(auth, refresh_token_ttl, -1),  %% issued already-expired
+    {ok, _} = winn_auth:register(<<"heidi@example.com">>, <<"pw">>),
+    {ok, L} = winn_auth:login(<<"heidi@example.com">>, <<"pw">>),
+    ?assertEqual({error, invalid_token},
+                 winn_auth:refresh(maps:get(refresh_token, L))).
+
+refresh_unknown_token_test() ->
+    setup_auth(),
+    ?assertEqual({error, invalid_token}, winn_auth:refresh(<<"not-a-real-token">>)),
+    ?assertEqual({error, invalid_token}, winn_auth:refresh(<<>>)).
+
 %% End-to-end through the compiler: Winn source using `Auth.register` / `Auth.login`
 %% must resolve (winn_codegen_resolve maps Auth -> winn_auth) and run.
 e2e_auth_register_login_test() ->
@@ -153,6 +201,20 @@ e2e_auth_register_login_test() ->
     Token = Mod:run(),
     ?assert(is_binary(Token)),
     ?assertNotEqual(<<"failed">>, Token).
+
+%% `Auth.refresh` must resolve through codegen (Auth -> winn_auth) and run.
+e2e_auth_refresh_resolves_test() ->
+    setup_auth(),
+    Source = "module RefreshResolve\n"
+             "  def run()\n"
+             "    match Auth.refresh(\"garbage\")\n"
+             "      ok _ => \"ok\"\n"
+             "      err _ => \"err\"\n"
+             "    end\n"
+             "  end\n"
+             "end\n",
+    Mod = compile_and_load(Source),
+    ?assertEqual(<<"err">>, Mod:run()).
 
 compile_and_load(Source) ->
     {ok, RawTokens, _} = winn_lexer:string(Source),
