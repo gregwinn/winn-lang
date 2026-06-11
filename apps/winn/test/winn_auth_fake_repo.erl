@@ -6,10 +6,12 @@
 %%   insert/2     -> {ok, RecordMap}   (atom keys, with an auto-assigned `id`)
 %%   get/2 (id)   -> {ok, RecordMap} | {error, not_found}
 %%   get/3 (field)-> {ok, RecordMap} | {error, not_found}
+%%   delete/1     -> ok               (by `id`, like winn_repo:delete/1)
 %%
-%% Inject it via:  winn_config:put(auth, repo_module, winn_auth_fake_repo).
+%% Holds both users and auth tokens (fields don't collide), so it backs the whole
+%% Auth flow. Inject it via:  winn_config:put(auth, repo_module, winn_auth_fake_repo).
 -module(winn_auth_fake_repo).
--export([reset/0, insert/2, get/2, get/3]).
+-export([reset/0, insert/2, get/2, get/3, delete/1]).
 
 -define(TAB, winn_auth_fake_repo_tab).
 
@@ -21,10 +23,18 @@ reset() ->
 
 insert(_Schema, Attrs) when is_map(Attrs) ->
     ensure(),
-    Id  = ets:info(?TAB, size) + 1,
+    %% Monotonic id so deletes never free an id a later insert could reuse.
+    Id  = erlang:unique_integer([positive, monotonic]),
     Rec = Attrs#{id => Id},
     ets:insert(?TAB, {Id, Rec}),
     {ok, Rec}.
+
+delete(#{id := Id}) ->
+    ensure(),
+    ets:delete(?TAB, Id),
+    ok;
+delete(_) ->
+    {error, not_a_schema_struct}.
 
 get(_Schema, Id) ->
     ensure(),

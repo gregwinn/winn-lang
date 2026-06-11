@@ -351,10 +351,25 @@ Auth.register("alice@example.com", "hunter2")
 ```
 
 ### `Auth.login(email, password)`
-Verify credentials and return `%{user: ..., access_token: token}`, or
-`{:error, :invalid_credentials}` (same error for wrong password and unknown email).
+Verify credentials and return `%{user: ..., access_token: token, refresh_token: token}`,
+or `{:error, :invalid_credentials}` (same error for wrong password and unknown email).
+Needs an `auth_token` schema for the refresh token — see the [Auth guide](modules.md#auth).
 ```winn
 Auth.login("alice@example.com", "hunter2")
+```
+
+### `Auth.refresh(refresh_token)`
+Rotate a refresh token: returns a fresh `%{access_token, refresh_token}` and
+invalidates the presented (single-use) token. Returns `{:error, :invalid_token}` if
+it's expired, unknown, or already rotated.
+```winn
+Auth.refresh(token)
+```
+
+### `Auth.logout(refresh_token)`
+Revoke a refresh token. Idempotent; returns `:ok`.
+```winn
+Auth.logout(token)
 ```
 
 ### `Auth.current_user(conn)`

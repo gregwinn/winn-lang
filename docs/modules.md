@@ -371,10 +371,11 @@ A small service layer over `Crypto` (password hashing), `JWT` (tokens), and `Rep
 dance so your handlers stay a few lines. Tokens are Bearer JWTs; the `[:auth]`
 middleware (see [Middleware](#middleware)) verifies them and attaches the claims.
 
-### User schema convention
+### Schema conventions
 
-`Auth` expects a schema named `user` (a `schema "users"` block) with at least an
-`email` and a `password_hash`. `verified` and `created_at` are recommended:
+`Auth` expects a `user` schema (a `schema "users"` block) with at least an `email`
+and a `password_hash`, plus an `auth_token` schema (`schema "auth_tokens"`) that
+backs refresh tokens:
 
 ```winn
 module User
@@ -387,14 +388,45 @@ module User
     field :created_at, :integer
   end
 end
+
+module AuthToken
+  use Winn.Schema
+
+  schema "auth_tokens" do
+    field :user_id, :integer
+    field :token_hash, :string
+    field :expires_at, :integer
+    field :created_at, :integer
+  end
+end
 ```
 
-Set the JWT signing secret (and, optionally, the access-token TTL in seconds) in
-config once at startup:
+Migration for the token table:
+
+```winn
+module Migrations.CreateAuthTokens
+  def up()
+    Repo.execute("CREATE TABLE auth_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at BIGINT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )")
+  end
+
+  def down()
+    Repo.execute("DROP TABLE auth_tokens")
+  end
+end
+```
+
+Set the JWT signing secret and (optionally) the token TTLs in config at startup:
 
 ```winn
 Config.put(:auth, :secret, System.get_env("JWT_SECRET"))
-Config.put(:auth, :access_token_ttl, 3600)   # optional, default 3600
+Config.put(:auth, :access_token_ttl, 3600)      # optional, default 3600 (1h)
+Config.put(:auth, :refresh_token_ttl, 2592000)  # optional, default 30 days
 ```
 
 ### `Auth.register(email, password)`
@@ -412,15 +444,43 @@ end
 
 ### `Auth.login(email, password)`
 
-Verifies the password and, on success, returns the user plus a signed access
-token. A wrong password and an unknown email both return `:invalid_credentials`
-(and take similar time) so attackers can't probe which emails exist.
+Verifies the password and, on success, returns the user plus a short-lived
+**access token** (JWT) and a long-lived **refresh token**. A wrong password and an
+unknown email both return `:invalid_credentials` (and take similar time) so
+attackers can't probe which emails exist.
 
 ```winn
 match Auth.login("alice@example.com", "hunter2")
-  ok result => Server.json(conn, result)   # %{user: ..., access_token: "..."}
+  ok result => Server.json(conn, result)
+  # result => %{user: ..., access_token: "...", refresh_token: "..."}
   err :invalid_credentials => Server.json(conn, %{error: "invalid login"}, 401)
 end
+```
+
+The access token is stateless and short-lived; the refresh token is opaque,
+stored server-side (only its hash), and revocable.
+
+### `Auth.refresh(refresh_token)`
+
+Exchanges a valid refresh token for a new access token **and a rotated refresh
+token** — the presented token is single-use and stops working after this call. An
+expired, unknown, or already-rotated token returns `:invalid_token`.
+
+```winn
+match Auth.refresh(params.refresh_token)
+  ok tokens => Server.json(conn, tokens)
+  # tokens => %{access_token: "...", refresh_token: "..."}
+  err :invalid_token => Server.json(conn, %{error: "invalid refresh token"}, 401)
+end
+```
+
+### `Auth.logout(refresh_token)`
+
+Revokes a refresh token (deletes it server-side). Idempotent — always returns `:ok`.
+
+```winn
+Auth.logout(params.refresh_token)
+Server.json(conn, %{ok: true})
 ```
 
 ### `Auth.current_user(conn)`
@@ -446,6 +506,8 @@ module Api.Router
     [
       {:post, "/auth/register", :register},
       {:post, "/auth/login",    :login},
+      {:post, "/auth/refresh",  :refresh},
+      {:post, "/auth/logout",   :logout},
       {:get,  "/api/me",        :me}
     ]
   end
@@ -455,7 +517,10 @@ module Api.Router
   end
 
   def auth_config()
-    %{secret: Config.get(:auth, :secret), exclude: ["/auth/login", "/auth/register"]}
+    %{
+      secret: Config.get(:auth, :secret),
+      exclude: ["/auth/login", "/auth/register", "/auth/refresh"]
+    }
   end
 
   def register(conn)
@@ -474,6 +539,20 @@ module Api.Router
     end
   end
 
+  def refresh(conn)
+    params = Server.body_params(conn)
+    match Auth.refresh(params.refresh_token)
+      ok tokens => Server.json(conn, tokens)
+      err _ => Server.json(conn, %{error: "invalid refresh token"}, 401)
+    end
+  end
+
+  def logout(conn)
+    params = Server.body_params(conn)
+    Auth.logout(params.refresh_token)
+    Server.json(conn, %{ok: true})
+  end
+
   def me(conn)
     match Auth.current_user(conn)
       ok user => Server.json(conn, user)
@@ -483,20 +562,39 @@ module Api.Router
 end
 ```
 
-A JS frontend logs in, then sends the token on protected requests:
+A JS frontend logs in, calls protected endpoints with the access token, and
+silently refreshes when it expires:
 
 ```js
-const { access_token } = await (await fetch("/auth/login", {
+let { access_token, refresh_token } = await (await fetch("/auth/login", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ email, password }),
 })).json();
 
-await fetch("/api/me", { headers: { Authorization: `Bearer ${access_token}` } });
+let res = await fetch("/api/me", {
+  headers: { Authorization: `Bearer ${access_token}` },
+});
+
+if (res.status === 401) {
+  // access token expired — rotate and retry
+  ({ access_token, refresh_token } = await (await fetch("/auth/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token }),
+  })).json());
+}
+
+// on sign-out:
+await fetch("/auth/logout", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ refresh_token }),
+});
 ```
 
-> Refresh tokens, logout/revocation, and cookie sessions build on this in later
-> releases. This is the core access-token flow.
+> Cookie sessions and account recovery (email verification, password reset) build
+> on this in later releases.
 
 ---
 
