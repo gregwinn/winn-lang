@@ -312,6 +312,28 @@ encoded = Crypto.base64_encode(token)
 decoded = Crypto.base64_decode(encoded)
 ```
 
+### `Crypto.hash_password(password)`
+Hash a password for storage using PBKDF2-HMAC-SHA256 (600,000 iterations) with a
+fresh random 16-byte salt. Returns a self-describing PHC-style string — the algorithm,
+iteration count, salt, and derived key all travel together, so the cost can be raised
+later without invalidating existing hashes. Hashing the same password twice yields
+different strings. **Do not** use `Crypto.hash(:sha256, ...)` for passwords.
+```winn
+hash = Crypto.hash_password("hunter2")
+# => "$pbkdf2-sha256$i=600000$<salt_b64>$<hash_b64>"
+```
+
+### `Crypto.verify_password(password, hash)`
+Verify a password against a stored `hash_password` string. Recomputes the derivation
+using the salt and iteration count embedded in the hash and compares in constant time.
+Returns `true` or `false`; a malformed or non-string hash returns `false` rather than
+crashing, so it is safe to call on stored data.
+```winn
+if Crypto.verify_password(password, user.password_hash)
+  # ... issue a token
+end
+```
+
 ---
 
 ## JSON

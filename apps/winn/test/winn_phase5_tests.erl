@@ -163,6 +163,19 @@ sql_select_test() ->
     {SQL, []} = winn_repo:sql_for_select(ModName, #{}),
     ?assert(binary:match(SQL, <<"SELECT * FROM tags">>) =/= nomatch).
 
+%% Regression for #172: row mapping must use the result-set column metadata so
+%% the DB-managed `id` (returned first by RETURNING * / SELECT *) is included and
+%% values aren't shifted onto the wrong keys. insert/get/update previously used
+%% the schema field list (which omits `id`), corrupting every record.
+%% Cols mimic the epgsql #column shape — only element(2) (the name) is read.
+row_to_map_cols_includes_id_test() ->
+    Cols = [{column, <<"id">>}, {column, <<"email">>}, {column, <<"password_hash">>}],
+    Row  = {1, <<"a@b.com">>, <<"$pbkdf2-sha256$...">>},
+    ?assertEqual(#{id => 1,
+                   email => <<"a@b.com">>,
+                   password_hash => <<"$pbkdf2-sha256$...">>},
+                 winn_repo:row_to_map_cols(Cols, Row)).
+
 %% ── Regression ───────────────────────────────────────────────────────────
 
 hello_regression_test() ->
