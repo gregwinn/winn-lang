@@ -379,6 +379,15 @@ Resolve the authenticated user from the conn's verified JWT claims (attached by 
 Auth.current_user(conn)
 ```
 
+### `Auth.write_session(conn, tokens)` / `Auth.clear_session(conn)`
+Cookie strategy (`auth_config` `strategy: :cookie`): set/clear the auth cookies
+(HttpOnly access + refresh, plus a readable `csrf` cookie for double-submit CSRF).
+The `[:auth]` middleware then reads the JWT from the cookie and enforces CSRF on
+unsafe methods. See the [Auth guide](modules.md#cookie-sessions--csrf).
+```winn
+conn = Auth.write_session(conn, tokens)
+```
+
 ---
 
 ## JSON

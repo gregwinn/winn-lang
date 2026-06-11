@@ -24,14 +24,21 @@ middleware(Conn, Next, Config) ->
     Req3 = cowboy_req:set_resp_header(<<"access-control-allow-headers">>, Headers, Req2),
     Req4 = cowboy_req:set_resp_header(<<"access-control-max-age">>, MaxAge, Req3),
 
-    Conn2 = Conn#{req => Req4},
+    %% Credentialed requests (cross-origin cookie auth) need this header AND a
+    %% specific (non-`*`) origin. Off by default.
+    Req5 = case maps:get(credentials, Config, false) of
+        true -> cowboy_req:set_resp_header(<<"access-control-allow-credentials">>, <<"true">>, Req4);
+        _    -> Req4
+    end,
+
+    Conn2 = Conn#{req => Req5},
 
     %% Handle preflight OPTIONS requests
     case maps:get(method, Conn) of
         <<"OPTIONS">> ->
             %% Return 204 No Content for preflight
-            Req5 = cowboy_req:reply(204, #{}, <<>>, Req4),
-            Conn2#{req => Req5};
+            Req6 = cowboy_req:reply(204, #{}, <<>>, Req5),
+            Conn2#{req => Req6};
         _ ->
             Next(Conn2)
     end.
