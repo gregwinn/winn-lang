@@ -1,6 +1,8 @@
 -module(winn_auth).
 -export([middleware/3, register/2, login/2, current_user/1,
-         refresh/1, logout/1, write_session/2, clear_session/1]).
+         refresh/1, logout/1, write_session/2, clear_session/1,
+         request_email_verification/1, verify_email/1,
+         request_password_reset/1, reset_password/2]).
 -export([csrf_valid/3]).  %% exported for tests
 
 %% This module is the `Auth` Winn module (winn_codegen_resolve maps Auth -> winn_auth)
@@ -71,8 +73,12 @@ register(Email, Password) when is_binary(Email), is_binary(Password) ->
                       verified => false,
                       created_at => os:system_time(second)},
             case Repo:insert(Schema, Attrs) of
-                {ok, User}      -> {ok, sanitize(User)};
-                {error, Reason} -> {error, Reason}
+                {ok, User} ->
+                    %% Optionally email a verification link (auth.verify_email).
+                    _ = maybe_send_verification(Email),
+                    {ok, sanitize(User)};
+                {error, Reason} ->
+                    {error, Reason}
             end;
         {error, Reason} ->
             {error, Reason}
@@ -108,22 +114,14 @@ login(Email, Password) when is_binary(Email), is_binary(Password) ->
 %% token. The presented token is invalidated (single use); an expired, unknown, or
 %% already-rotated token returns `invalid_token`.
 refresh(RawToken) when is_binary(RawToken) ->
-    Repo   = repo_mod(),
-    Schema = token_schema(),
-    case Repo:get(Schema, token_hash, hash_token(RawToken)) of
+    case consume_token(RawToken, refresh) of
         {ok, Token} ->
-            _ = delete_token(Token),   %% single-use: consume on any presentation
-            case maps:get(expires_at, Token, 0) > os:system_time(second) of
-                true ->
-                    case load_user(maps:get(user_id, Token, undefined)) of
-                        {ok, User} -> issue_tokens(User);
-                        {error, _} -> {error, invalid_token}
-                    end;
-                false ->
-                    {error, invalid_token}
+            case load_user(maps:get(user_id, Token, undefined)) of
+                {ok, User} -> issue_tokens(User);
+                {error, _} -> {error, invalid_token}
             end;
-        {error, _} ->
-            {error, invalid_token}
+        Error ->
+            Error
     end;
 refresh(_) ->
     {error, invalid_token}.
@@ -160,6 +158,68 @@ current_user(Conn) when is_map(Conn) ->
     end;
 current_user(_) ->
     {error, unauthenticated}.
+
+%% ── Account recovery (email verification + password reset) ───────────────────
+
+%% Email a verification link for an address. Always `:ok` — never reveals whether
+%% the address is registered. (register/2 calls this when `auth.verify_email` is on.)
+request_email_verification(Email) when is_binary(Email) ->
+    Repo = repo_mod(),
+    case Repo:get(user_schema(), email, Email) of
+        {ok, User} ->
+            case create_token(user_id(User), verify_email, verify_ttl()) of
+                {ok, Raw} -> send_link(Email, <<"Verify your email">>, verify_url(), Raw);
+                _         -> ok
+            end;
+        _ ->
+            ok
+    end,
+    ok.
+
+%% Consume an email-verification token and mark its user verified.
+verify_email(Token) when is_binary(Token) ->
+    case consume_token(Token, verify_email) of
+        {ok, T} ->
+            case load_user(maps:get(user_id, T, undefined)) of
+                {ok, User} -> update_user(User#{verified => true});
+                {error, _} -> {error, invalid_token}
+            end;
+        Error ->
+            Error
+    end;
+verify_email(_) ->
+    {error, invalid_token}.
+
+%% Begin a password reset. Always `:ok` (no user enumeration); emails a reset link
+%% only if the address exists.
+request_password_reset(Email) when is_binary(Email) ->
+    Repo = repo_mod(),
+    case Repo:get(user_schema(), email, Email) of
+        {ok, User} ->
+            case create_token(user_id(User), reset_password, reset_ttl()) of
+                {ok, Raw} -> send_link(Email, <<"Reset your password">>, reset_url(), Raw);
+                _         -> ok
+            end;
+        _ ->
+            ok
+    end,
+    ok.
+
+%% Complete a password reset with a valid (single-use, unexpired) token.
+reset_password(Token, NewPassword) when is_binary(Token), is_binary(NewPassword) ->
+    case consume_token(Token, reset_password) of
+        {ok, T} ->
+            case load_user(maps:get(user_id, T, undefined)) of
+                {ok, User} ->
+                    update_user(User#{password_hash => winn_crypto:hash_password(NewPassword)});
+                {error, _} ->
+                    {error, invalid_token}
+            end;
+        Error ->
+            Error
+    end;
+reset_password(_, _) ->
+    {error, invalid_token}.
 
 %% ── Session cookies (cookie strategy) ────────────────────────────────────────
 
@@ -263,32 +323,75 @@ issue_access_token(User) ->
             {ok, winn_jwt:sign(Claims, Secret)}
     end.
 
-%% Create and store a refresh token; returns the raw token (shown to the client
-%% once). Only the hash is persisted.
 issue_refresh_token(UserId) ->
+    create_token(UserId, refresh, refresh_ttl()).
+
+%% Create and store a single-use token in the `auth_tokens` table for `Purpose`
+%% (refresh | verify_email | reset_password). Returns the raw token (shown once);
+%% only its hash is persisted.
+create_token(UserId, Purpose, Ttl) ->
     Repo  = repo_mod(),
     Raw   = gen_token(?REFRESH_TOKEN_BYTES),
     Attrs = #{user_id    => UserId,
               token_hash => hash_token(Raw),
-              expires_at => os:system_time(second) + refresh_ttl(),
+              purpose    => Purpose,
+              expires_at => os:system_time(second) + Ttl,
               created_at => os:system_time(second)},
     case Repo:insert(token_schema(), Attrs) of
         {ok, _}         -> {ok, Raw};
         {error, Reason} -> {error, Reason}
     end.
 
-%% N bytes of entropy as a hex string (refresh + CSRF tokens).
+%% Look up a token by hash, consume it (single-use: always deleted on
+%% presentation), and validate its purpose + expiry. `Purpose` must match so a
+%% verify/reset link can't be redeemed at /auth/refresh and vice versa.
+consume_token(RawToken, Purpose) ->
+    Repo = repo_mod(),
+    case Repo:get(token_schema(), token_hash, hash_token(RawToken)) of
+        {ok, Token} ->
+            _ = delete_token(Token),
+            PurposeOk = maps:get(purpose, Token, refresh) =:= Purpose,
+            NotExpired = maps:get(expires_at, Token, 0) > os:system_time(second),
+            case PurposeOk andalso NotExpired of
+                true  -> {ok, Token};
+                false -> {error, invalid_token}
+            end;
+        {error, _} ->
+            {error, invalid_token}
+    end.
+
+%% N bytes of entropy as a hex string (refresh / CSRF / recovery tokens).
 gen_token(N) ->
     binary:encode_hex(crypto:strong_rand_bytes(N)).
 
-%% Refresh tokens are high-entropy random values, so a fast SHA-256 (not PBKDF2)
-%% is the right at-rest hash; it also makes lookup-by-hash a single indexed query.
+%% Tokens are high-entropy random values, so a fast SHA-256 (not PBKDF2) is the
+%% right at-rest hash; it also makes lookup-by-hash a single indexed query.
 hash_token(Raw) ->
     winn_crypto:hash(sha256, Raw).
 
 delete_token(Token) ->
     Repo = repo_mod(),
     Repo:delete(Token#{'__schema__' => token_schema()}).
+
+%% Persist a changed user record (verify flag / new password hash).
+update_user(User) ->
+    Repo = repo_mod(),
+    case Repo:update(User#{'__schema__' => user_schema()}) of
+        {ok, Updated}   -> {ok, sanitize(Updated)};
+        {error, Reason} -> {error, Reason}
+    end.
+
+%% Email a link of the form `<UrlPrefix><raw token>` (best-effort).
+send_link(To, Subject, UrlPrefix, Token) ->
+    Body = <<"Open this link to continue:\n\n", UrlPrefix/binary, Token/binary, "\n">>,
+    _ = winn_mailer:send(To, Subject, Body),
+    ok.
+
+maybe_send_verification(Email) ->
+    case winn_config:get(auth, verify_email) of
+        true -> request_email_verification(Email);
+        _    -> ok
+    end.
 
 load_user(undefined) -> {error, not_found};
 load_user(UserId) ->
@@ -323,23 +426,31 @@ token_schema() ->
         Schema -> Schema
     end.
 
-refresh_ttl() ->
-    case winn_config:get(auth, refresh_token_ttl) of
-        nil                  -> ?DEFAULT_REFRESH_TTL;
-        T when is_integer(T) -> T;
-        _                    -> ?DEFAULT_REFRESH_TTL
+refresh_ttl() -> config_int(refresh_token_ttl, ?DEFAULT_REFRESH_TTL).
+verify_ttl()  -> config_int(verify_token_ttl, 86400).  %% 24h
+reset_ttl()   -> config_int(reset_token_ttl, 3600).    %% 1h
+
+%% URL prefixes the recovery emails point at; the raw token is appended.
+verify_url() -> config_bin(verify_url, <<"http://localhost:4000/auth/verify?token=">>).
+reset_url()  -> config_bin(reset_url,  <<"http://localhost:4000/auth/reset?token=">>).
+
+config_int(Key, Default) ->
+    case winn_config:get(auth, Key) of
+        N when is_integer(N) -> N;
+        _                    -> Default
+    end.
+
+config_bin(Key, Default) ->
+    case winn_config:get(auth, Key) of
+        B when is_binary(B) -> B;
+        _                   -> Default
     end.
 
 %% JWT signing secret (binary) from Config, or nil if unset.
 secret() ->
     winn_config:get(auth, secret).
 
-access_ttl() ->
-    case winn_config:get(auth, access_token_ttl) of
-        nil               -> ?DEFAULT_ACCESS_TTL;
-        T when is_integer(T) -> T;
-        _                 -> ?DEFAULT_ACCESS_TTL
-    end.
+access_ttl() -> config_int(access_token_ttl, ?DEFAULT_ACCESS_TTL).
 
 extract_bearer(Conn) ->
     Req = maps:get(req, Conn),
