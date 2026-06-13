@@ -235,6 +235,18 @@ Same pattern as `get` and `post`.
 
 Low-level request. `method` is an atom (`:get`, `:post`, `:put`, `:patch`, `:delete`). `body` is a map (JSON-encoded), binary, or `nil`.
 
+### Timeouts & options
+
+Every verb takes an optional trailing **options map**. Defaults are generous (connect 15s, receive 30s) and overridable per request — useful for slow "compute on request" endpoints that exceed hackney's old 5s receive default.
+
+```winn
+HTTP.get(url, %{timeout: 30000})                 # receive timeout (ms)
+HTTP.post(url, body, %{connect_timeout: 15000})  # connect timeout (ms)
+HTTP.post(url, body, %{follow_redirect: false})
+```
+
+Recognised keys: `timeout` / `recv_timeout` (receive timeout in ms — `timeout` is an alias), `connect_timeout` (ms), and `follow_redirect` (boolean). The no-option forms (`HTTP.get(url)`, `HTTP.post(url, body)`, …) use the defaults, so existing code is unchanged.
+
 ### Response Format
 
 All HTTP functions return `{:ok, response}` or `{:error, reason}`.
