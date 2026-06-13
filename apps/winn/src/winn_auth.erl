@@ -1,6 +1,7 @@
 -module(winn_auth).
 -export([middleware/3, register/2, login/2, current_user/1,
-         refresh/1, logout/1]).
+         refresh/1, logout/1, write_session/2, clear_session/1]).
+-export([csrf_valid/3]).  %% exported for tests
 
 %% This module is the `Auth` Winn module (winn_codegen_resolve maps Auth -> winn_auth)
 %% and also the JWT Bearer middleware used by winn_router.
@@ -13,6 +14,13 @@
 %%                                     | {error, :invalid_token}
 %%   Auth.logout(refresh_token)     -> :ok
 %%   Auth.current_user(conn)        -> {ok, user} | {error, :unauthenticated}
+%%   Auth.write_session(conn, tokens) -> conn   (cookie strategy: set auth cookies)
+%%   Auth.clear_session(conn)         -> conn   (cookie strategy: clear auth cookies)
+%%
+%% Strategy: the `[:auth]` middleware authenticates via the `Authorization: Bearer`
+%% header by default. Set `auth_config` `strategy: :cookie` to instead read the
+%% access JWT from an HttpOnly cookie and enforce double-submit CSRF on unsafe
+%% methods. `write_session`/`clear_session` set/clear those cookies on login/logout.
 %%
 %% Tokens: the access token is a short-lived JWT (stateless). The refresh token is
 %% a long-lived, opaque, high-entropy random string; only its SHA-256 hash is
@@ -31,6 +39,12 @@
 -define(DEFAULT_ACCESS_TTL, 3600).
 -define(DEFAULT_REFRESH_TTL, 2592000). %% 30 days
 -define(REFRESH_TOKEN_BYTES, 32).
+
+%% Cookie-strategy names (stateless JWT-in-cookie + double-submit CSRF).
+-define(ACCESS_COOKIE,  <<"access_token">>).
+-define(REFRESH_COOKIE, <<"refresh_token">>).
+-define(CSRF_COOKIE,    <<"csrf">>).
+-define(CSRF_HEADER,    <<"x-csrf-token">>).
 
 %% A valid-format PHC string used to keep login timing uniform when the email is
 %% unknown, so an attacker can't distinguish "no such user" from "wrong password"
@@ -147,30 +161,77 @@ current_user(Conn) when is_map(Conn) ->
 current_user(_) ->
     {error, unauthenticated}.
 
+%% ── Session cookies (cookie strategy) ────────────────────────────────────────
+
+%% Set the auth cookies from a login/refresh token result, for the `:cookie`
+%% strategy. The access (and refresh) tokens go in HttpOnly cookies the browser
+%% sends automatically; a separate non-HttpOnly `csrf` cookie is the double-submit
+%% token the frontend echoes in the `X-CSRF-Token` header. Returns the conn.
+write_session(Conn, Tokens) when is_map(Tokens) ->
+    Access  = maps:get(access_token, Tokens, <<>>),
+    Conn1   = winn_server:set_cookie(Conn, ?ACCESS_COOKIE, Access, http_only_opts()),
+    Conn2   = case maps:get(refresh_token, Tokens, undefined) of
+                  R when is_binary(R) ->
+                      winn_server:set_cookie(Conn1, ?REFRESH_COOKIE, R, http_only_opts());
+                  _ ->
+                      Conn1
+              end,
+    winn_server:set_cookie(Conn2, ?CSRF_COOKIE, gen_token(16), csrf_opts()).
+
+%% Clear the auth cookies (log out of a cookie session).
+clear_session(Conn) ->
+    Expire = #{path => <<"/">>, max_age => 0},
+    C1 = winn_server:set_cookie(Conn, ?ACCESS_COOKIE,  <<>>, Expire),
+    C2 = winn_server:set_cookie(C1,   ?REFRESH_COOKIE, <<>>, Expire),
+    winn_server:set_cookie(C2, ?CSRF_COOKIE, <<>>, Expire).
+
 %% ── Middleware ───────────────────────────────────────────────────────────────
 
-%% Auth middleware: extracts Bearer token, validates JWT, adds claims to conn.
-%% Returns 401 if token is missing/invalid, unless path is excluded.
-
+%% Auth middleware. In the default `:bearer` strategy it reads the access JWT from
+%% the `Authorization: Bearer` header; in `:cookie` strategy it reads it from the
+%% access cookie and enforces double-submit CSRF on unsafe methods. Verified claims
+%% are attached to the conn. 401 on missing/invalid token, 403 on CSRF failure,
+%% unless the path is excluded.
 middleware(Conn, Next, Config) ->
     Path = maps:get(path, Conn),
-    ExcludedPaths = maps:get(exclude, Config, []),
-    case is_excluded(Path, ExcludedPaths) of
+    case is_excluded(Path, maps:get(exclude, Config, [])) of
         true ->
             Next(Conn);
         false ->
-            case extract_token(Conn) of
-                {ok, Token} ->
-                    Secret = maps:get(secret, Config, <<>>),
-                    case winn_jwt:verify(Token, Secret) of
-                        {ok, Claims} ->
-                            Next(Conn#{claims => Claims});
-                        {error, _Reason} ->
-                            unauthorized(Conn)
-                    end;
-                {error, _} ->
-                    unauthorized(Conn)
+            case authenticate(Conn, Config, strategy(Config)) of
+                {ok, Conn2}      -> Next(Conn2);
+                {error, csrf}    -> forbidden(Conn);
+                {error, _Reason} -> unauthorized(Conn)
             end
+    end.
+
+strategy(Config) ->
+    case maps:get(strategy, Config, bearer) of
+        cookie -> cookie;
+        _      -> bearer
+    end.
+
+authenticate(Conn, Config, bearer) ->
+    case extract_bearer(Conn) of
+        {ok, Token} -> verify_token(Conn, Token, Config);
+        Error       -> Error
+    end;
+authenticate(Conn, Config, cookie) ->
+    case csrf_ok(Conn) of
+        true ->
+            case extract_cookie_token(Conn) of
+                {ok, Token} -> verify_token(Conn, Token, Config);
+                Error       -> Error
+            end;
+        false ->
+            {error, csrf}
+    end.
+
+verify_token(Conn, Token, Config) ->
+    Secret = maps:get(secret, Config, <<>>),
+    case winn_jwt:verify(Token, Secret) of
+        {ok, Claims}    -> {ok, Conn#{claims => Claims}};
+        {error, Reason} -> {error, Reason}
     end.
 
 %% ── Internal ────────────────────────────────────────────────────────────────
@@ -206,7 +267,7 @@ issue_access_token(User) ->
 %% once). Only the hash is persisted.
 issue_refresh_token(UserId) ->
     Repo  = repo_mod(),
-    Raw   = gen_refresh_token(),
+    Raw   = gen_token(?REFRESH_TOKEN_BYTES),
     Attrs = #{user_id    => UserId,
               token_hash => hash_token(Raw),
               expires_at => os:system_time(second) + refresh_ttl(),
@@ -216,9 +277,9 @@ issue_refresh_token(UserId) ->
         {error, Reason} -> {error, Reason}
     end.
 
-%% High-entropy URL-safe refresh token.
-gen_refresh_token() ->
-    binary:encode_hex(crypto:strong_rand_bytes(?REFRESH_TOKEN_BYTES)).
+%% N bytes of entropy as a hex string (refresh + CSRF tokens).
+gen_token(N) ->
+    binary:encode_hex(crypto:strong_rand_bytes(N)).
 
 %% Refresh tokens are high-entropy random values, so a fast SHA-256 (not PBKDF2)
 %% is the right at-rest hash; it also makes lookup-by-hash a single indexed query.
@@ -280,7 +341,7 @@ access_ttl() ->
         _                 -> ?DEFAULT_ACCESS_TTL
     end.
 
-extract_token(Conn) ->
+extract_bearer(Conn) ->
     Req = maps:get(req, Conn),
     case cowboy_req:header(<<"authorization">>, Req) of
         <<"Bearer ", Token/binary>> ->
@@ -289,8 +350,51 @@ extract_token(Conn) ->
             {error, no_token}
     end.
 
+extract_cookie_token(Conn) ->
+    case winn_server:get_cookie(Conn, ?ACCESS_COOKIE) of
+        nil   -> {error, no_token};
+        Token -> {ok, Token}
+    end.
+
+%% Double-submit CSRF: safe methods pass; unsafe methods require the X-CSRF-Token
+%% header to match the `csrf` cookie.
+csrf_ok(Conn) ->
+    Req = maps:get(req, Conn),
+    HeaderToken = case cowboy_req:header(?CSRF_HEADER, Req) of
+                      undefined -> nil;
+                      V         -> V
+                  end,
+    csrf_valid(maps:get(method, Conn), HeaderToken, winn_server:get_cookie(Conn, ?CSRF_COOKIE)).
+
+%% Pure CSRF decision (exported for tests).
+csrf_valid(Method, HeaderToken, CookieToken) ->
+    case is_safe_method(Method) of
+        true  -> true;
+        false -> is_binary(HeaderToken) andalso is_binary(CookieToken)
+                   andalso ct_equal(HeaderToken, CookieToken)
+    end.
+
+is_safe_method(M) -> lists:member(M, [<<"GET">>, <<"HEAD">>, <<"OPTIONS">>]).
+
+%% Constant-time equality.
+ct_equal(A, B) when byte_size(A) =/= byte_size(B) -> false;
+ct_equal(A, B) -> ct_equal(A, B, 0).
+ct_equal(<<>>, <<>>, Acc) -> Acc =:= 0;
+ct_equal(<<X, RA/binary>>, <<Y, RB/binary>>, Acc) -> ct_equal(RA, RB, Acc bor (X bxor Y)).
+
+%% HttpOnly cookie carrying a token the browser sends but JS can't read.
+http_only_opts() ->
+    #{http_only => true, secure => true, same_site => <<"Lax">>, path => <<"/">>}.
+
+%% CSRF cookie is readable by JS (so it can echo it in the header).
+csrf_opts() ->
+    #{http_only => false, secure => true, same_site => <<"Lax">>, path => <<"/">>}.
+
 unauthorized(Conn) ->
     winn_server:json(Conn, #{error => <<"unauthorized">>}, 401).
+
+forbidden(Conn) ->
+    winn_server:json(Conn, #{error => <<"forbidden">>}, 403).
 
 is_excluded(_Path, []) ->
     false;

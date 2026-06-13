@@ -138,6 +138,26 @@ Set a response header. Applied when the response is sent.
 conn = Server.set_header(conn, "x-request-id", UUID.v4())
 ```
 
+#### `Server.set_cookie(conn, name, value)` / `Server.set_cookie(conn, name, value, opts)`
+
+Set a response cookie. `opts` keys: `http_only`, `secure` (booleans), `same_site`
+(`"Lax"` / `"Strict"` / `"None"`), `path`, `domain`, `max_age` (seconds). Multiple
+cookies are supported.
+
+```winn
+conn = Server.set_cookie(conn, "session", token, %{
+  http_only: true, secure: true, same_site: "Lax", path: "/"
+})
+```
+
+#### `Server.get_cookie(conn, name)`
+
+Read a request cookie by name. Returns the value, or `nil`.
+
+```winn
+token = Server.get_cookie(conn, "session")
+```
+
 ### Middleware
 
 Define middleware functions that run before every handler. Export `middleware/0` from your router:
@@ -593,8 +613,63 @@ await fetch("/auth/logout", {
 });
 ```
 
-> Cookie sessions and account recovery (email verification, password reset) build
-> on this in later releases.
+### Cookie sessions & CSRF
+
+The examples above use **Bearer tokens** (the default) — the frontend stores the
+access token and sends it in the `Authorization` header. For same-origin web apps
+you can instead keep the token out of JavaScript entirely by setting
+`strategy: :cookie` in `auth_config`:
+
+```winn
+def auth_config()
+  %{strategy: :cookie, secret: Config.get(:auth, :secret),
+    exclude: ["/auth/login", "/auth/register", "/auth/refresh"]}
+end
+```
+
+In cookie mode the `[:auth]` middleware reads the access JWT from an **HttpOnly**
+cookie instead of the header, and enforces **double-submit CSRF** on unsafe methods
+(POST/PUT/PATCH/DELETE): the request must carry an `X-CSRF-Token` header equal to the
+non-HttpOnly `csrf` cookie. Your login/refresh handlers set the cookies with
+`Auth.write_session`, and logout clears them with `Auth.clear_session`:
+
+```winn
+def login(conn)
+  params = Server.body_params(conn)
+  match Auth.login(params.email, params.password)
+    ok tokens =>
+      conn = Auth.write_session(conn, tokens)   # sets access/refresh (HttpOnly) + csrf cookies
+      Server.json(conn, %{ok: true})
+    err _ => Server.json(conn, %{error: "invalid login"}, 401)
+  end
+end
+
+def logout(conn)
+  conn = Auth.clear_session(conn)
+  Server.json(conn, %{ok: true})
+end
+```
+
+The browser sends the cookies automatically. The frontend reads the `csrf` cookie and
+echoes it on writes:
+
+```js
+function csrf() {
+  return document.cookie.split("; ").find(c => c.startsWith("csrf="))?.split("=")[1];
+}
+await fetch("/api/posts", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf() },
+  body: JSON.stringify(post),   // access-token cookie sent automatically
+});
+```
+
+> **Cross-origin cookie auth** (SPA on a different origin than the API) additionally
+> needs CORS credentials: set `cors_config` `credentials: true` and a **specific**
+> `origins` (not `*`), and the frontend must send `fetch(..., { credentials: "include" })`.
+> Same-origin apps don't need CORS at all.
+
+> Account recovery (email verification, password reset) builds on this in a later release.
 
 ---
 

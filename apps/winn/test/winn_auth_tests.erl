@@ -184,6 +184,23 @@ refresh_unknown_token_test() ->
     ?assertEqual({error, invalid_token}, winn_auth:refresh(<<"not-a-real-token">>)),
     ?assertEqual({error, invalid_token}, winn_auth:refresh(<<>>)).
 
+%% ── CSRF (double-submit) decision logic ──────────────────────────────────────
+
+csrf_safe_methods_skip_check_test() ->
+    %% GET/HEAD/OPTIONS never require a CSRF token.
+    ?assert(winn_auth:csrf_valid(<<"GET">>, nil, nil)),
+    ?assert(winn_auth:csrf_valid(<<"HEAD">>, nil, nil)),
+    ?assert(winn_auth:csrf_valid(<<"OPTIONS">>, nil, nil)).
+
+csrf_unsafe_requires_matching_token_test() ->
+    %% Unsafe methods need header == cookie.
+    ?assert(winn_auth:csrf_valid(<<"POST">>, <<"tok">>, <<"tok">>)),
+    ?assert(winn_auth:csrf_valid(<<"DELETE">>, <<"abc">>, <<"abc">>)),
+    ?assertNot(winn_auth:csrf_valid(<<"POST">>, <<"tok">>, <<"other">>)),
+    ?assertNot(winn_auth:csrf_valid(<<"POST">>, nil, nil)),
+    ?assertNot(winn_auth:csrf_valid(<<"POST">>, <<"tok">>, nil)),
+    ?assertNot(winn_auth:csrf_valid(<<"PUT">>, nil, <<"tok">>)).
+
 %% End-to-end through the compiler: Winn source using `Auth.register` / `Auth.login`
 %% must resolve (winn_codegen_resolve maps Auth -> winn_auth) and run.
 e2e_auth_register_login_test() ->

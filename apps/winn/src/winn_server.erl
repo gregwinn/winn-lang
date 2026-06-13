@@ -24,7 +24,7 @@
 -export([json/2, json/3, text/2, text/3, send/4]).
 -export([body_params/1, path_param/2, query_param/2, header/2]).
 -export([method/1, path/1]).
--export([set_header/3]).
+-export([set_header/3, set_cookie/3, set_cookie/4, get_cookie/2]).
 
 -define(LISTENER, winn_http_listener).
 
@@ -138,6 +138,55 @@ path(#{path := P})     -> P.
 set_header(#{req := Req0} = Conn, Name, Value) when is_binary(Name), is_binary(Value) ->
     Req1 = cowboy_req:set_resp_header(Name, Value, Req0),
     Conn#{req := Req1}.
+
+%% Set a response cookie. Opts is a Winn map; recognised keys: `http_only`,
+%% `secure` (booleans), `same_site` ("Lax"|"Strict"|"None"), `path`, `domain`
+%% (strings), `max_age` (integer seconds). Multiple cookies are supported.
+set_cookie(Conn, Name, Value) ->
+    set_cookie(Conn, Name, Value, #{}).
+
+set_cookie(#{req := Req0} = Conn, Name, Value, Opts)
+        when is_binary(Name), is_binary(Value), is_map(Opts) ->
+    Req1 = cowboy_req:set_resp_cookie(Name, Value, Req0, cookie_opts(Opts)),
+    Conn#{req := Req1}.
+
+%% Read a request cookie by name. Returns the value binary, or `nil`.
+get_cookie(#{req := Req}, Name) when is_binary(Name) ->
+    case lists:keyfind(Name, 1, cowboy_req:parse_cookies(Req)) of
+        {_, Value} -> Value;
+        false      -> nil
+    end;
+get_cookie(_, _) ->
+    nil.
+
+cookie_opts(Opts) ->
+    maps:fold(fun cookie_opt/3, #{}, Opts).
+
+cookie_opt(http_only, V, Acc)               -> Acc#{http_only => to_bool(V)};
+cookie_opt(secure, V, Acc)                  -> Acc#{secure => to_bool(V)};
+cookie_opt(path, V, Acc)                    -> Acc#{path => to_bin(V)};
+cookie_opt(domain, V, Acc)                  -> Acc#{domain => to_bin(V)};
+cookie_opt(max_age, V, Acc) when is_integer(V) -> Acc#{max_age => V};
+cookie_opt(same_site, V, Acc)               -> Acc#{same_site => same_site(V)};
+cookie_opt(_, _, Acc)                       -> Acc.
+
+same_site(V) ->
+    case string:lowercase(to_list(V)) of
+        "strict" -> strict;
+        "none"   -> none;
+        _        -> lax
+    end.
+
+to_bool(true)        -> true;
+to_bool(<<"true">>)  -> true;
+to_bool(_)           -> false.
+
+to_bin(V) when is_binary(V) -> V;
+to_bin(V) when is_list(V)   -> list_to_binary(V).
+
+to_list(V) when is_binary(V) -> binary_to_list(V);
+to_list(V) when is_list(V)   -> V;
+to_list(V) when is_atom(V)   -> atom_to_list(V).
 
 %% ── JSON encoding helpers ───────────────────────────────────────────────
 
