@@ -11,7 +11,7 @@
 %% Holds both users and auth tokens (fields don't collide), so it backs the whole
 %% Auth flow. Inject it via:  winn_config:put(auth, repo_module, winn_auth_fake_repo).
 -module(winn_auth_fake_repo).
--export([reset/0, insert/2, get/2, get/3, delete/1]).
+-export([reset/0, insert/2, get/2, get/3, delete/1, update/1]).
 
 -define(TAB, winn_auth_fake_repo_tab).
 
@@ -34,6 +34,14 @@ delete(#{id := Id}) ->
     ets:delete(?TAB, Id),
     ok;
 delete(_) ->
+    {error, not_a_schema_struct}.
+
+update(#{id := Id} = Struct) ->
+    ensure(),
+    Rec = maps:remove('__schema__', Struct),
+    ets:insert(?TAB, {Id, Rec}),
+    {ok, Rec};
+update(_) ->
     {error, not_a_schema_struct}.
 
 get(_Schema, Id) ->

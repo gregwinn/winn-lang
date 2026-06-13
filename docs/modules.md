@@ -415,11 +415,15 @@ module AuthToken
   schema "auth_tokens" do
     field :user_id, :integer
     field :token_hash, :string
+    field :purpose, :string      # refresh | verify_email | reset_password
     field :expires_at, :integer
     field :created_at, :integer
   end
 end
 ```
+
+The one `auth_tokens` table backs refresh tokens **and** the single-use
+verification / password-reset tokens (`purpose` distinguishes them).
 
 Migration for the token table:
 
@@ -430,6 +434,7 @@ module Migrations.CreateAuthTokens
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,
       token_hash TEXT NOT NULL UNIQUE,
+      purpose TEXT NOT NULL,
       expires_at BIGINT NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     )")
@@ -516,6 +521,59 @@ match Auth.current_user(conn)
 end
 ```
 
+### Account recovery — email verification & password reset
+
+These use single-use, hashed, expiring tokens (stored in `auth_tokens`) delivered by
+the [`Mailer`](stdlib.md#mailer). Configure the email + link settings once:
+
+```winn
+Config.put(:auth, :verify_email, true)   # register/2 then emails a verification link
+Config.put(:auth, :verify_url, "https://myapp.com/auth/verify?token=")
+Config.put(:auth, :reset_url,  "https://myapp.com/auth/reset?token=")
+# optional TTLs (seconds): verify_token_ttl (default 24h), reset_token_ttl (default 1h)
+```
+
+#### `Auth.verify_email(token)`
+
+Consume a verification token and mark the user verified. The token is single-use;
+expired/unknown/reused tokens return `:invalid_token`.
+
+```winn
+# GET /auth/verify?token=...
+match Auth.verify_email(Server.query_param(conn, "token"))
+  ok user => Server.json(conn, %{verified: true})
+  err _ => Server.json(conn, %{error: "invalid or expired token"}, 400)
+end
+```
+
+`Auth.request_email_verification(email)` re-sends a link (always `:ok`).
+
+#### `Auth.request_password_reset(email)`
+
+Email a reset link if the address exists. **Always returns `:ok`** — it never reveals
+whether an email is registered.
+
+```winn
+def forgot(conn)
+  Auth.request_password_reset(Server.body_params(conn).email)
+  Server.json(conn, %{ok: true})   # same response either way
+end
+```
+
+#### `Auth.reset_password(token, new_password)`
+
+Set a new password using a valid reset token (single-use; expired/unknown → `:invalid_token`).
+
+```winn
+def reset(conn)
+  params = Server.body_params(conn)
+  match Auth.reset_password(params.token, params.password)
+    ok _ => Server.json(conn, %{ok: true})
+    err _ => Server.json(conn, %{error: "invalid or expired token"}, 400)
+  end
+end
+```
+
 ### Putting it together — a router
 
 ```winn
@@ -528,6 +586,9 @@ module Api.Router
       {:post, "/auth/login",    :login},
       {:post, "/auth/refresh",  :refresh},
       {:post, "/auth/logout",   :logout},
+      {:get,  "/auth/verify",   :verify},
+      {:post, "/auth/forgot",   :forgot},
+      {:post, "/auth/reset",    :reset},
       {:get,  "/api/me",        :me}
     ]
   end
@@ -539,7 +600,8 @@ module Api.Router
   def auth_config()
     %{
       secret: Config.get(:auth, :secret),
-      exclude: ["/auth/login", "/auth/register", "/auth/refresh"]
+      exclude: ["/auth/login", "/auth/register", "/auth/refresh",
+                "/auth/verify", "/auth/forgot", "/auth/reset"]
     }
   end
 
@@ -571,6 +633,26 @@ module Api.Router
     params = Server.body_params(conn)
     Auth.logout(params.refresh_token)
     Server.json(conn, %{ok: true})
+  end
+
+  def verify(conn)
+    match Auth.verify_email(Server.query_param(conn, "token"))
+      ok _ => Server.json(conn, %{verified: true})
+      err _ => Server.json(conn, %{error: "invalid or expired token"}, 400)
+    end
+  end
+
+  def forgot(conn)
+    Auth.request_password_reset(Server.body_params(conn).email)
+    Server.json(conn, %{ok: true})   # always 200 — no user enumeration
+  end
+
+  def reset(conn)
+    params = Server.body_params(conn)
+    match Auth.reset_password(params.token, params.password)
+      ok _ => Server.json(conn, %{ok: true})
+      err _ => Server.json(conn, %{error: "invalid or expired token"}, 400)
+    end
   end
 
   def me(conn)
@@ -668,8 +750,6 @@ await fetch("/api/posts", {
 > needs CORS credentials: set `cors_config` `credentials: true` and a **specific**
 > `origins` (not `*`), and the frontend must send `fetch(..., { credentials: "include" })`.
 > Same-origin apps don't need CORS at all.
-
-> Account recovery (email verification, password reset) builds on this in a later release.
 
 ---
 

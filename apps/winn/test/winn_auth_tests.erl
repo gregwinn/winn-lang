@@ -75,8 +75,21 @@ setup_auth() ->
     winn_config:put(auth, user_schema, user),
     winn_config:put(auth, token_schema, auth_token),
     winn_config:put(auth, secret, <<"test_secret">>),
-    winn_config:put(auth, refresh_token_ttl, nil),  %% default; reset per test
+    %% reset per-test config to defaults
+    winn_config:put(auth, refresh_token_ttl, nil),
+    winn_config:put(auth, verify_email, false),
+    winn_config:put(auth, verify_token_ttl, nil),
+    winn_config:put(auth, reset_token_ttl, nil),
+    winn_config:put(mailer, transport, test),
+    winn_mailer:clear(),
     winn_auth_fake_repo:reset().
+
+%% Pull the raw token out of the most recent recovery email.
+token_from_last_email() ->
+    [Msg | _] = lists:reverse(winn_mailer:captured()),
+    [_, After]   = binary:split(maps:get(body, Msg), <<"token=">>),
+    [Token | _]  = binary:split(After, <<"\n">>),
+    Token.
 
 register_returns_sanitized_user_test() ->
     setup_auth(),
@@ -200,6 +213,76 @@ csrf_unsafe_requires_matching_token_test() ->
     ?assertNot(winn_auth:csrf_valid(<<"POST">>, nil, nil)),
     ?assertNot(winn_auth:csrf_valid(<<"POST">>, <<"tok">>, nil)),
     ?assertNot(winn_auth:csrf_valid(<<"PUT">>, nil, <<"tok">>)).
+
+%% ── Account recovery: email verification + password reset ────────────────────
+
+register_sends_verification_when_enabled_test() ->
+    setup_auth(),
+    winn_config:put(auth, verify_email, true),
+    {ok, _} = winn_auth:register(<<"newuser@example.com">>, <<"pw">>),
+    [Msg] = winn_mailer:captured(),
+    ?assertEqual(<<"newuser@example.com">>, maps:get(to, Msg)),
+    ?assertEqual(<<"Verify your email">>, maps:get(subject, Msg)).
+
+register_no_verification_by_default_test() ->
+    setup_auth(),
+    {ok, _} = winn_auth:register(<<"quiet@example.com">>, <<"pw">>),
+    ?assertEqual([], winn_mailer:captured()).
+
+verify_email_flips_verified_and_is_single_use_test() ->
+    setup_auth(),
+    winn_config:put(auth, verify_email, true),
+    {ok, _} = winn_auth:register(<<"v@example.com">>, <<"pw">>),
+    Token = token_from_last_email(),
+    {ok, User} = winn_auth:verify_email(Token),
+    ?assert(maps:get(verified, User)),
+    ?assertEqual({error, invalid_token}, winn_auth:verify_email(Token)).
+
+verify_email_bad_token_test() ->
+    setup_auth(),
+    ?assertEqual({error, invalid_token}, winn_auth:verify_email(<<"garbage">>)).
+
+verify_email_expired_test() ->
+    setup_auth(),
+    winn_config:put(auth, verify_email, true),
+    winn_config:put(auth, verify_token_ttl, -1),
+    {ok, _} = winn_auth:register(<<"ve@example.com">>, <<"pw">>),
+    ?assertEqual({error, invalid_token}, winn_auth:verify_email(token_from_last_email())).
+
+password_reset_no_enumeration_test() ->
+    setup_auth(),
+    %% Unknown email -> :ok, and no mail is sent.
+    ?assertEqual(ok, winn_auth:request_password_reset(<<"nobody@example.com">>)),
+    ?assertEqual([], winn_mailer:captured()).
+
+password_reset_flow_test() ->
+    setup_auth(),
+    {ok, _} = winn_auth:register(<<"r@example.com">>, <<"oldpw">>),
+    ?assertEqual(ok, winn_auth:request_password_reset(<<"r@example.com">>)),
+    Token = token_from_last_email(),
+    {ok, _} = winn_auth:reset_password(Token, <<"newpw">>),
+    %% Old password is dead; the new one works.
+    ?assertEqual({error, invalid_credentials},
+                 winn_auth:login(<<"r@example.com">>, <<"oldpw">>)),
+    ?assertMatch({ok, _}, winn_auth:login(<<"r@example.com">>, <<"newpw">>)),
+    %% Reset token is single-use.
+    ?assertEqual({error, invalid_token},
+                 winn_auth:reset_password(Token, <<"another">>)).
+
+reset_password_expired_test() ->
+    setup_auth(),
+    winn_config:put(auth, reset_token_ttl, -1),
+    {ok, _} = winn_auth:register(<<"re@example.com">>, <<"pw">>),
+    ?assertEqual(ok, winn_auth:request_password_reset(<<"re@example.com">>)),
+    ?assertEqual({error, invalid_token},
+                 winn_auth:reset_password(token_from_last_email(), <<"x">>)).
+
+%% A recovery token must not be redeemable at /auth/refresh (purpose is checked).
+recovery_token_rejected_by_refresh_test() ->
+    setup_auth(),
+    winn_config:put(auth, verify_email, true),
+    {ok, _} = winn_auth:register(<<"x@example.com">>, <<"pw">>),
+    ?assertEqual({error, invalid_token}, winn_auth:refresh(token_from_last_email())).
 
 %% End-to-end through the compiler: Winn source using `Auth.register` / `Auth.login`
 %% must resolve (winn_codegen_resolve maps Auth -> winn_auth) and run.
