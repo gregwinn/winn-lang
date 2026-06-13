@@ -2,6 +2,12 @@
 
 All notable changes to the Winn language are documented here.
 
+## [0.9.4] - 2026-06-13
+
+### Fixes
+- **HTTP client request timeouts are now configurable** ([#184](https://github.com/gregwinn/winn-lang/issues/184)) — `winn_http` called hackney with only `[{follow_redirect, true}]`, inheriting its 8s-connect / **5s-receive** defaults with no override, so valid-but-slow endpoints (e.g. live "compute on request" APIs) failed with `{error, timeout}`. Each verb now takes an optional trailing options map — `HTTP.get(url, %{timeout: 30000})`, `HTTP.post(url, body, %{connect_timeout: 15000})` — supporting `timeout` / `recv_timeout` / `connect_timeout` (ms) and `follow_redirect`. Defaults are raised to **connect 15s / recv 30s**. Backward compatible: the existing `get/1`, `post/2`, … `request/3` arities are retained and delegate with the new defaults, so no caller changes are required.
+- **Release infrastructure: apt index regeneration** ([#176](https://github.com/gregwinn/winn-lang/issues/176)) — the `update-apt-repo` job ran `gzip -k` (no `-f`), which refused to overwrite the `Packages.gz` committed by a prior release and failed the job under `bash -e`. Added `-f` so the gzipped index regenerates each release.
+
 ## [0.9.3] - 2026-06-10
 
 ### Fixes
