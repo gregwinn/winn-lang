@@ -40,6 +40,7 @@
 | [#32](https://github.com/gregwinn/winn-lang/issues/32) | AI Pipelines | `AI.chat()`, `AI.classify()`, `AI.extract()` as stdlib, Agent DSL, Smart Pipes |
 | [#33](https://github.com/gregwinn/winn-lang/issues/33) | Distributed Events | `Event.emit` / `on :event do` across BEAM nodes, zero infrastructure |
 | [#34](https://github.com/gregwinn/winn-lang/issues/34) | Background Jobs | `use Winn.Job` with queues, retries, cron, live dashboard |
+| [#161](https://github.com/gregwinn/winn-lang/issues/161) | **Authentication** (shipping) | Email/password auth: PBKDF2 hashing, JWT + revocable refresh tokens, cookie sessions + CSRF, email verification + password reset, and a `winn create auth` scaffold ([guide](auth.md)) |
 | [#103](https://github.com/gregwinn/winn-lang/issues/103) | **Reactive events** | Language-level `on`/`emit` pub/sub built on BEAM distribution |
 | [#108](https://github.com/gregwinn/winn-lang/issues/108) | **Distributed clustering** | `Winn.connect(:node@host)` — agents, events, and pipelines auto-span nodes |
 

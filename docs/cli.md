@@ -154,9 +154,14 @@ winn create router Api
 
 winn create scaffold Post title:string body:text
 # => src/models/post.winn, src/controllers/post_controller.winn, test/post_test.winn
+
+winn create auth
+# => User + AuthToken models, migrations, and an auth router with
+#    register/login/refresh/logout/verify/forgot/reset/me endpoints
 ```
 
-Scaffold generates model + CRUD controller + test file.
+Scaffold generates model + CRUD controller + test file. `create auth` scaffolds a
+complete email/password setup — see the [authentication guide](auth.md).
 
 <a id="winn-migrate"></a>
 ### `winn migrate`
