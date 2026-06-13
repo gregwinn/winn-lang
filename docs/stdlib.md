@@ -390,6 +390,40 @@ conn = Auth.write_session(conn, tokens)
 
 ---
 
+## Mailer
+
+Pluggable email delivery. Choose a transport in config; the API is the same
+regardless:
+
+```winn
+Config.put(:mailer, :transport, :http)         # :http (SendGrid) or :test
+Config.put(:mailer, :api_key, System.get_env("SENDGRID_API_KEY"))
+Config.put(:mailer, :from, "no-reply@myapp.com")
+```
+
+| Transport | Use |
+|-----------|-----|
+| `:http`   | POST to SendGrid's v3 API (set `:api_key`; optional `:endpoint` override). |
+| `:test`   | Capture messages in-process for assertions — no mail is sent. |
+
+> SMTP isn't built in yet (it would add a dependency); use `:http` or a provider's
+> HTTP API for now.
+
+### `Mailer.send(to, subject, body)` / `Mailer.send(to, subject, body, opts)`
+Send an email. Returns `{:ok, transport}` or `{:error, reason}` (e.g.
+`:no_transport`, `:no_api_key`). `opts` keys: `from`, `reply_to` (strings),
+`html` (boolean — send `text/html` instead of `text/plain`).
+```winn
+Mailer.send("user@example.com", "Welcome!", "Thanks for signing up.")
+Mailer.send(email, "Reset your password", html_body, %{html: true})
+```
+
+### `Mailer.captured()` / `Mailer.clear()` (test transport)
+With `transport: :test`, `captured()` returns the list of sent messages (maps with
+`to`, `subject`, `body`, `from`, ...) and `clear()` empties the box. For tests.
+
+---
+
 ## JSON
 
 ### `JSON.encode(term)`
