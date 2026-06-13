@@ -505,7 +505,7 @@ Revokes a refresh token (deletes it server-side). Idempotent — always returns 
 
 ```winn
 Auth.logout(params.refresh_token)
-Server.json(conn, %{ok: true})
+Server.json(conn, %{status: "ok"})
 ```
 
 ### `Auth.current_user(conn)`
@@ -556,7 +556,7 @@ whether an email is registered.
 ```winn
 def forgot(conn)
   Auth.request_password_reset(Server.body_params(conn).email)
-  Server.json(conn, %{ok: true})   # same response either way
+  Server.json(conn, %{status: "ok"})   # same response either way
 end
 ```
 
@@ -568,7 +568,7 @@ Set a new password using a valid reset token (single-use; expired/unknown → `:
 def reset(conn)
   params = Server.body_params(conn)
   match Auth.reset_password(params.token, params.password)
-    ok _ => Server.json(conn, %{ok: true})
+    ok _ => Server.json(conn, %{status: "ok"})
     err _ => Server.json(conn, %{error: "invalid or expired token"}, 400)
   end
 end
@@ -632,7 +632,7 @@ module Api.Router
   def logout(conn)
     params = Server.body_params(conn)
     Auth.logout(params.refresh_token)
-    Server.json(conn, %{ok: true})
+    Server.json(conn, %{status: "ok"})
   end
 
   def verify(conn)
@@ -644,13 +644,13 @@ module Api.Router
 
   def forgot(conn)
     Auth.request_password_reset(Server.body_params(conn).email)
-    Server.json(conn, %{ok: true})   # always 200 — no user enumeration
+    Server.json(conn, %{status: "ok"})   # always 200 — no user enumeration
   end
 
   def reset(conn)
     params = Server.body_params(conn)
     match Auth.reset_password(params.token, params.password)
-      ok _ => Server.json(conn, %{ok: true})
+      ok _ => Server.json(conn, %{status: "ok"})
       err _ => Server.json(conn, %{error: "invalid or expired token"}, 400)
     end
   end
@@ -721,14 +721,14 @@ def login(conn)
   match Auth.login(params.email, params.password)
     ok tokens =>
       conn = Auth.write_session(conn, tokens)   # sets access/refresh (HttpOnly) + csrf cookies
-      Server.json(conn, %{ok: true})
+      Server.json(conn, %{status: "ok"})
     err _ => Server.json(conn, %{error: "invalid login"}, 401)
   end
 end
 
 def logout(conn)
   conn = Auth.clear_session(conn)
-  Server.json(conn, %{ok: true})
+  Server.json(conn, %{status: "ok"})
 end
 ```
 

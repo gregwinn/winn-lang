@@ -788,6 +788,9 @@ run_create(["router" | [Name]]) ->
 run_create(["scaffold" | Rest]) when length(Rest) >= 1 ->
     winn_generator:generate(scaffold, Rest),
     halt(0);
+run_create(["auth" | Rest]) ->
+    winn_generator:generate(auth, Rest),
+    halt(0);
 run_create(_) ->
     io:format("Usage:~n"
               "  winn create model <Name> [field:type ...]~n"
@@ -795,6 +798,7 @@ run_create(_) ->
               "  winn create task <name>~n"
               "  winn create router <Name>~n"
               "  winn create scaffold <Name> [field:type ...]~n"
+              "  winn create auth                  email/password auth (models, migrations, router)~n"
               "~n"
               "Shorthand: winn c model User name:string~n"),
     halt(0).
