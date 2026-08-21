@@ -9,6 +9,9 @@ All notable changes to the Winn language are documented here.
 
   The existing generator tests only asserted on the generated file's *text*, which is how this shipped; `winn_generator_tests` now compiles the generated source through the real lexer → parser → transform → codegen pipeline for both `create model` and `create scaffold`, and asserts the output exports `__schema__/1`, `new/1`, and `all/0`.
 
+### Tests
+- **The live HTTP test no longer gates the build on httpbin.org's uptime** — `winn_m1_tests:get_httpbin_test` already tolerated `{error, _}` (no network), but a *reachable but unhealthy* httpbin returns a well-formed `{ok, #{status := 503}}`, which hit the `?assertEqual(200, Status)` and failed CI. It now asserts the decoded-JSON body only on a 200 and otherwise just checks the response shape, which is what the test is actually for.
+
 ## [0.9.4] - 2026-06-13
 
 ### Fixes
