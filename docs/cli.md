@@ -337,7 +337,7 @@ Interactive REPL with variable persistence.
 ### `winn version`
 
 ```sh
-winn version    # => winn 0.7.0
+winn version    # => winn 0.9.5
 winn -v
 winn --version
 ```

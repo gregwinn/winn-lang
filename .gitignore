@@ -5,3 +5,5 @@ rebar.lock
 ebin/
 apps/winn/src/winn_lexer.erl
 apps/winn/src/winn_parser.erl
+erl_crash.dump
+*.test_backup
