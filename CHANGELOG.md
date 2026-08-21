@@ -2,6 +2,16 @@
 
 All notable changes to the Winn language are documented here.
 
+## [0.9.5] - 2026-08-21
+
+### Fixes
+- **`winn create model` and `winn create scaffold` now generate models that compile** ([#183](https://github.com/gregwinn/winn-lang/issues/183)) — `winn_generator:model_template/3` emitted the struct field list as *quoted* atoms (`struct [:"name", :"email"]`), which the parser rejects, so every generated model failed at its `struct` line with `{2, winn_parser, ["syntax error before: ", "':'"]}`. Simply unquoting the atoms is **not** sufficient: `struct` and `use Winn.Schema` each generate `new/1`, and the duplicate definition crashes the Core Erlang compiler. The `struct` line is therefore dropped entirely — the `schema` block already generates `__schema__/1`, `new/1`, and the model query methods, which is everything `Repo` uses. This is the same schema-only shape `winn create auth` generates. `winn create scaffold` delegates to the model generator and is fixed by the same change.
+
+  The existing generator tests only asserted on the generated file's *text*, which is how this shipped; `winn_generator_tests` now compiles the generated source through the real lexer → parser → transform → codegen pipeline for both `create model` and `create scaffold`, and asserts the output exports `__schema__/1`, `new/1`, and `all/0`.
+
+### Tests
+- **The live HTTP test no longer gates the build on httpbin.org's uptime** — `winn_m1_tests:get_httpbin_test` already tolerated `{error, _}` (no network), but a *reachable but unhealthy* httpbin returns a well-formed `{ok, #{status := 503}}`, which hit the `?assertEqual(200, Status)` and failed CI. It now asserts the decoded-JSON body only on a 200 and otherwise just checks the response shape, which is what the test is actually for.
+
 ## [0.9.4] - 2026-06-13
 
 ### Fixes
