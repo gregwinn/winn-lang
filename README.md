@@ -193,7 +193,7 @@ language-winn/
 │   ├── winn_watch.erl       # file watcher with live terminal dashboard
 │   ├── winn_cli.erl         # CLI escript (new/compile/run/start/test/docs/watch/version/help)
 │   └── winn.erl             # public API
-├── apps/winn/test/           # 360 tests across 26 test files
+├── apps/winn/test/           # 777 tests across 73 test files
 └── docs/
     ├── getting-started.md    # install, create, build, run
     ├── language.md           # syntax reference
