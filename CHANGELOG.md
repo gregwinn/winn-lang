@@ -55,6 +55,28 @@ All notable changes to the Winn language are documented here.
 ### Documentation
 - **Production deployment guide** — new `docs/deployment.md` covering BEAM scheduler sizing against Kubernetes CPU limits, `ERL_FLAGS` recipes, structured JSON logging with `Logger` plus Promtail/Loki + Datadog wiring, a drop-in Prometheus `/metrics` handler built on `Metrics.snapshot()`/`http_snapshot()`/`beam_stats()`, SIGTERM drain via OTP with the readiness-flip `preStop` pattern, a complete Kubernetes Deployment + Service + Ingress template (incl. 1Password Operator), a multi-stage Dockerfile with a non-root runtime image, and a merge-ready pre-flight checklist. Linked from `docs/getting-started.md`. (#153)
 
+## [0.9.4] - 2026-06-13
+
+### Fixes
+- **HTTP client request timeouts are now configurable** ([#184](https://github.com/gregwinn/winn-lang/issues/184)) — `winn_http` called hackney with only `[{follow_redirect, true}]`, inheriting its 8s-connect / **5s-receive** defaults with no override, so valid-but-slow endpoints (e.g. live "compute on request" APIs) failed with `{error, timeout}`. Each verb now takes an optional trailing options map — `HTTP.get(url, %{timeout: 30000})`, `HTTP.post(url, body, %{connect_timeout: 15000})` — supporting `timeout` / `recv_timeout` / `connect_timeout` (ms) and `follow_redirect`. Defaults are raised to **connect 15s / recv 30s**. Backward compatible: the existing `get/1`, `post/2`, … `request/3` arities are retained and delegate with the new defaults, so no caller changes are required.
+- **Release infrastructure: apt index regeneration** ([#176](https://github.com/gregwinn/winn-lang/issues/176)) — the `update-apt-repo` job ran `gzip -k` (no `-f`), which refused to overwrite the `Packages.gz` committed by a prior release and failed the job under `bash -e`. Added `-f` so the gzipped index regenerates each release.
+
+## [0.9.3] - 2026-06-10
+
+### Fixes
+- **Repeated `_` wildcard in a function head or pattern now compiles** ([#170](https://github.com/gregwinn/winn-lang/issues/170)) — codegen emitted the literal Core Erlang variable `'_'` for every wildcard, so any head/pattern with more than one (e.g. `def head_or([x | _], _)`) was rejected by `core_lint` with `{duplicate_var,'_',...}`. Each `_` is now freshened to a distinct anonymous variable, matching Erlang semantics where repeated `_` is valid. Affects `gen_param`/`gen_pattern` in `winn_codegen_pattern.erl`.
+
+## [0.9.2] - 2026-04-12
+
+### Fixes
+- **`winn_pool` race: trap exits from failed epgsql connects** — `winn_pool:init/1` called `epgsql:connect/1` during startup to build the initial pool. On failure (e.g. `econnrefused` in CI with no database), `epgsql`'s internal `gen_server` terminated with the connect error reason and propagated via the link to `winn_pool`. Without `trap_exit`, the pool inherited that exit and died. The flakiness was masked before v0.9.1 because the earlier binary-host bug crashed `gen_tcp:connect/4` with `badarg` before reaching the link-exit path; fixing #145 unmasked the race. Set `process_flag(trap_exit, true)` in `winn_pool:init/1` so EXIT signals from failed connects become ignorable messages.
+- **Release infrastructure: nfpm asset URL** — the `build-linux-packages` job in `.github/workflows/release.yml` used the wrong nfpm asset name (`linux_amd64` vs the actual `Linux_x86_64`), which 404'd and caused the v0.9.1 `.deb`/`.rpm` builds to fail. Fixed the URL and added curl retry.
+
+## [0.9.1] - 2026-04-12
+
+### Fixes
+- **`Repo.configure` with binary host now works** ([#145](https://github.com/gregwinn/winn-lang/issues/145)) — when Winn code called `Repo.configure(%{host: ...})` the map values were stored as binaries in ETS, and `winn_repo:connect/0` passed them directly to `epgsql:connect/1` → `gen_tcp:connect/4`, which rejects binary hosts with `badarg`. This broke any project reading `DB_HOST` from an env var (the scaffolder default pattern). Fixed by normalizing `host`, `database`, `username`, and `password` to charlists before handing the config to epgsql. The same normalization is applied in `winn_pool:create_one/1` for pooled connections.
+
 ## [0.9.0] - 2026-04-09
 
 ### Breaking Changes
