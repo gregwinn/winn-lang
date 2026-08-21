@@ -51,7 +51,7 @@ handle_message(#{<<"method">> := <<"initialize">>, <<"id">> := Id} = _Msg, State
         },
         <<"serverInfo">> => #{
             <<"name">> => <<"winn-lsp">>,
-            <<"version">> => <<"0.9.0">>
+            <<"version">> => <<"0.9.2">>
         }
     },
     send_response(Id, Result),

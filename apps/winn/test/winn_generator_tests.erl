@@ -131,3 +131,66 @@ scaffold_generates_model_controller_and_test_test() ->
 
     file:set_cwd(element(2, OldDir)),
     os:cmd("rm -rf " ++ TmpDir).
+
+%% ── Generated output actually compiles (#183) ──────────────────────────────
+%%
+%% The generators above only assert on file *text*, which is why #183 shipped:
+%% `model_template` emitted `struct [:"name"]` (quoted atoms), which the parser
+%% rejects outright. Emitting unquoted `struct [:name]` does not fix it either —
+%% `struct` and `use Winn.Schema` both generate `new/1`, so the duplicate
+%% definition crashes the Core Erlang compiler. These tests run the generated
+%% source through the real pipeline so either regression fails the build.
+
+in_tmp_dir(Fun) ->
+    {ok, OldDir} = file:get_cwd(),
+    TmpDir = "/tmp/winn_gen_compile_" ++ integer_to_list(erlang:unique_integer([positive])),
+    ok = filelib:ensure_path(TmpDir),
+    ok = file:set_cwd(TmpDir),
+    try Fun()
+    after
+        file:set_cwd(OldDir),
+        os:cmd("rm -rf " ++ TmpDir)
+    end.
+
+compile_winn_source(Source) ->
+    {ok, RawTokens, _}  = winn_lexer:string(Source),
+    Tokens              = winn_newline_filter:filter(RawTokens),
+    {ok, AST}           = winn_parser:parse(Tokens),
+    Transformed         = winn_transform:transform(AST),
+    [CoreMod]           = winn_codegen:gen(Transformed),
+    {ok, ModName, Bin}  = compile:forms(CoreMod, [from_core, return_errors]),
+    code:purge(ModName),
+    {module, ModName}   = code:load_binary(ModName, "test", Bin),
+    ModName.
+
+model_output_compiles_test() ->
+    Mod = in_tmp_dir(fun() ->
+        winn_generator:generate(model, ["Widget", "name:string", "email:string"]),
+        {ok, Bin} = file:read_file("src/models/widget.winn"),
+        compile_winn_source(binary_to_list(Bin))
+    end),
+    Exports = Mod:module_info(exports),
+    ?assert(lists:member({'__schema__', 1}, Exports)),
+    ?assert(lists:member({new, 1}, Exports)),
+    ?assert(lists:member({all, 0}, Exports)).
+
+model_output_omits_struct_line_test() ->
+    Content = in_tmp_dir(fun() ->
+        winn_generator:generate(model, ["Gadget", "name:string"]),
+        {ok, Bin} = file:read_file("src/models/gadget.winn"),
+        Bin
+    end),
+    %% `struct` alongside `use Winn.Schema` defines new/1 twice (#183).
+    ?assertEqual(nomatch, binary:match(Content, <<"struct [">>)),
+    %% Quoted atoms are a parse error wherever they appear.
+    ?assertEqual(nomatch, binary:match(Content, <<":\"">>)).
+
+scaffold_model_output_compiles_test() ->
+    Mod = in_tmp_dir(fun() ->
+        winn_generator:generate(scaffold, ["Doohickey", "title:string", "body:text"]),
+        {ok, Bin} = file:read_file("src/models/doohickey.winn"),
+        compile_winn_source(binary_to_list(Bin))
+    end),
+    Exports = Mod:module_info(exports),
+    ?assert(lists:member({'__schema__', 1}, Exports)),
+    ?assert(lists:member({new, 1}, Exports)).

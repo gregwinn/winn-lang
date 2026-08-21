@@ -19,12 +19,27 @@ configure_pool_size_test() ->
 %% ── pool_status when pool not started ───────────────────────────────────────
 
 pool_not_started_test() ->
-    %% Ensure pool is not running
+    %% Ensure pool is not running. gen_server:stop may return with a
+    %% non-normal reason when the pool's linked connection attempts
+    %% failed (econnrefused in CI with no DB) — swallow those since we
+    %% only care that the process is gone afterwards.
     case whereis(winn_pool) of
         undefined -> ok;
-        Pid -> gen_server:stop(Pid)
+        Pid ->
+            try gen_server:stop(Pid, normal, 1000)
+            catch exit:_ -> ok
+            end,
+            %% Wait for the name to actually be released
+            wait_for_unregister(winn_pool, 20)
     end,
     ?assertEqual({error, pool_not_started}, winn_repo:pool_status()).
+
+wait_for_unregister(_Name, 0) -> timeout;
+wait_for_unregister(Name, N) ->
+    case whereis(Name) of
+        undefined -> ok;
+        _ -> timer:sleep(50), wait_for_unregister(Name, N - 1)
+    end.
 
 %% ── Repo exports pool functions ─────────────────────────────────────────────
 

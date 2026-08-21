@@ -55,7 +55,7 @@ cp _build/default/bin/winn /usr/local/bin/
 
 ```sh
 winn version
-# => winn 0.7.0
+# => winn 0.9.5
 ```
 
 ## Quick Start
