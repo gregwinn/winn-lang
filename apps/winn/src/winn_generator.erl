@@ -102,21 +102,22 @@ parse_fields(Args) ->
 
 %% ── Templates ────────────────────────────────────────────────────────────────
 
+%% No `struct` line: `use Winn.Schema` + the `schema` block already generate
+%% `__schema__/1` and `new/1` (plus the model query methods), which is
+%% everything `Repo` needs. Emitting `struct` as well defines `new/1` twice and
+%% crashes the Core Erlang compiler. `winn create auth` (#168) uses the same
+%% schema-only shape. (#183)
 model_template(ModName, TableName, Fields) ->
-    FieldAtoms = [":\"" ++ N ++ "\"" || {N, _} <- Fields],
-    StructFields = string:join(FieldAtoms, ", "),
     SchemaFields = [io_lib:format("    field :~s, :~s~n", [N, T]) || {N, T} <- Fields],
     lists:flatten(io_lib:format(
         "module ~s~n"
         "  use Winn.Schema~n"
         "~n"
-        "  struct [~s]~n"
-        "~n"
         "  schema \"~s\" do~n"
         "~s"
         "  end~n"
         "end~n",
-        [ModName, StructFields, TableName, SchemaFields])).
+        [ModName, TableName, SchemaFields])).
 
 migration_template(Name, Fields) ->
     case Fields of

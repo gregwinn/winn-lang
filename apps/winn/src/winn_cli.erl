@@ -1080,7 +1080,7 @@ is_tty() ->
 get_version() ->
     case application:get_key(winn, vsn) of
         {ok, Vsn} -> Vsn;
-        _         -> "0.9.4"
+        _         -> "0.9.5"
     end.
 
 print_version() ->
