@@ -1,8 +1,8 @@
 # Winn Roadmap
 
-## Current Status — v0.9.2
+## Current Status — v0.9.4
 
-642 tests passing. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics. LSP with inline errors and autocomplete.
+774 tests. Homebrew install (`brew install gregwinn/winn/winn`). VS Code extension with syntax highlighting and compile-on-save diagnostics. LSP with inline errors and autocomplete.
 
 ### What's Shipped
 
@@ -19,21 +19,46 @@
 | v0.9.0 | Developer Tooling | `winn fmt`, `winn lint` (10 rules), `winn lsp` (diagnostics + autocomplete), improved `winn new` (--api, --minimal), command shortcuts, codegen split |
 | v0.9.1 | Bug fix | `Repo.configure` binary host crashing epgsql connect ([#145](https://github.com/gregwinn/winn-lang/issues/145)) |
 | v0.9.2 | Bug fix | `winn_pool` race: trap exits from failed epgsql connects + release infra nfpm URL fix |
+| v0.9.3 | Bug fix | Repeated `_` wildcard in a function head rejected by `core_lint` ([#170](https://github.com/gregwinn/winn-lang/issues/170)) |
+| v0.9.4 | Bug fix | Configurable HTTP client timeouts ([#184](https://github.com/gregwinn/winn-lang/issues/184)) + apt index regeneration |
+
+---
+
+## Merged on `develop` — ships as v0.10.0
+
+Complete and merged, awaiting the release cut. See the CHANGELOG `[Unreleased]` section.
+
+| Issue | Feature | Description |
+|-------|---------|-------------|
+| [#161](https://github.com/gregwinn/winn-lang/issues/161) | **Authentication** | Email/password auth: PBKDF2 hashing ([#162](https://github.com/gregwinn/winn-lang/issues/162)), `Auth` service ([#163](https://github.com/gregwinn/winn-lang/issues/163)), revocable refresh tokens ([#164](https://github.com/gregwinn/winn-lang/issues/164)), cookie sessions + CSRF ([#165](https://github.com/gregwinn/winn-lang/issues/165)), `Mailer` ([#166](https://github.com/gregwinn/winn-lang/issues/166)), account recovery ([#167](https://github.com/gregwinn/winn-lang/issues/167)), `winn create auth` scaffold ([#168](https://github.com/gregwinn/winn-lang/issues/168)) — [guide](auth.md) |
+| [#104](https://github.com/gregwinn/winn-lang/issues/104) | **Pipelines** | `pipeline` keyword — Broadway-shape producer/processor/batcher with prefetch backpressure and supervised drain (accelerated from v1.0 for Echolo `fleet_delivery`) |
+| [#98](https://github.com/gregwinn/winn-lang/issues/98) | Parser conflicts | Operator precedence declared in `winn_parser.yrl`; shift/reduce 53 → 3. Chained comparisons are now a parse error (**breaking**) |
+| [#58](https://github.com/gregwinn/winn-lang/issues/58) | Bounds checking | Safe defaults for runtime functions. `List.first/last` on `[]` return `nil` (**breaking**) |
+| [#156](https://github.com/gregwinn/winn-lang/issues/156) | Prometheus metrics | `Metrics.prometheus()` — v0.0.4 text exposition format |
+| [#157](https://github.com/gregwinn/winn-lang/issues/157) | String escapes | `\"`, `\\`, `\n`, `\r`, `\t`, `\0` in double-quoted strings |
+| [#128](https://github.com/gregwinn/winn-lang/issues/128) | Private functions | `private def` — excluded from the module export list |
+| [#118](https://github.com/gregwinn/winn-lang/issues/118) / [#119](https://github.com/gregwinn/winn-lang/issues/119) | LSP phases 1–2 | Lint diagnostics; document symbols, hover, go-to-definition |
+| [#153](https://github.com/gregwinn/winn-lang/issues/153) | Deployment guide | [docs/deployment.md](deployment.md) — sizing, logging, metrics, graceful shutdown, k8s |
+| [#172](https://github.com/gregwinn/winn-lang/issues/172) | Repo row mapping | Map result rows by DB column metadata, not the schema field list |
 
 ---
 
 ## Coming Next
 
-### v0.10.0 — Hardening
+### v0.10.0 — Hardening (remaining)
 
 | Issue | Feature | Description |
 |-------|---------|-------------|
 | [#56](https://github.com/gregwinn/winn-lang/issues/56) | Compiler errors | Better error handling for edge cases |
 | [#57](https://github.com/gregwinn/winn-lang/issues/57) | Validators | Extended changeset validators |
-| [#58](https://github.com/gregwinn/winn-lang/issues/58) | Bounds checking | Safe defaults for runtime functions |
-| [#98](https://github.com/gregwinn/winn-lang/issues/98) | Parser conflicts | Resolve shift/reduce conflicts before v1.0 |
 | [#100](https://github.com/gregwinn/winn-lang/issues/100) | Transform hardening | Pass ordering tests and invariant docs |
-| [#104](https://github.com/gregwinn/winn-lang/issues/104) | **Pipelines** (shipped) | `pipeline` keyword — Broadway-shape producer/processor/batcher with prefetch backpressure and supervised drain (accelerated from v1.0 for Echolo `fleet_delivery`) |
+| [#117](https://github.com/gregwinn/winn-lang/issues/117) | Lint config | Configurable lint rules via `.winn-lint.json` |
+| [#120](https://github.com/gregwinn/winn-lang/issues/120) | LSP Phase 3 | Completion, find references, formatting integration |
+| [#129](https://github.com/gregwinn/winn-lang/issues/129) | Type annotations | Gradual type checking |
+| [#130](https://github.com/gregwinn/winn-lang/issues/130) | Test fixtures | Setup/teardown, fixtures, and skip support |
+| [#131](https://github.com/gregwinn/winn-lang/issues/131) | Stdlib docs | Complete Changeset, Server, Health, Repo documentation |
+| [#132](https://github.com/gregwinn/winn-lang/issues/132) | `winn doctor` | Environment diagnostics command |
+| [#183](https://github.com/gregwinn/winn-lang/issues/183) | Model generator | `winn create model` emits quoted struct atoms that don't parse |
 
 ### v1.0.0 — The Winn Platform
 
@@ -42,7 +67,6 @@
 | [#32](https://github.com/gregwinn/winn-lang/issues/32) | AI Pipelines | `AI.chat()`, `AI.classify()`, `AI.extract()` as stdlib, Agent DSL, Smart Pipes |
 | [#33](https://github.com/gregwinn/winn-lang/issues/33) | Distributed Events | `Event.emit` / `on :event do` across BEAM nodes, zero infrastructure |
 | [#34](https://github.com/gregwinn/winn-lang/issues/34) | Background Jobs | `use Winn.Job` with queues, retries, cron, live dashboard |
-| [#161](https://github.com/gregwinn/winn-lang/issues/161) | **Authentication** (shipping) | Email/password auth: PBKDF2 hashing, JWT + revocable refresh tokens, cookie sessions + CSRF, email verification + password reset, and a `winn create auth` scaffold ([guide](auth.md)) |
 | [#103](https://github.com/gregwinn/winn-lang/issues/103) | **Reactive events** | Language-level `on`/`emit` pub/sub built on BEAM distribution |
 | [#108](https://github.com/gregwinn/winn-lang/issues/108) | **Distributed clustering** | `Winn.connect(:node@host)` — agents, events, and pipelines auto-span nodes |
 

@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Branch per feature.** Every new feature or change must be developed on its own branch off `develop`. Never commit directly to `main` or `develop`. Use descriptive branch names: `feature/repl`, `fix/scaffold-module-name`, `docs/update-cli`.
 - **Document everything.** Every new or updated feature must be documented before merging. Update the relevant docs in `docs/` (language.md, stdlib.md, modules.md, cli.md, getting-started.md) and add a CHANGELOG.md entry. If it changes syntax, update the VS Code grammar in the separate `language-winn-vscode` repo. If it adds a CLI command, update the help text in `winn_cli.erl`.
+- **Back-merge every hotfix.** Patch releases are cut as `hotfix/*` off `main`, so their fixes do not exist on `develop`. Open a back-merge PR (`main` → `develop`) as the last step of every hotfix release. Skipping this silently regresses already-released fixes on `develop` — it went unnoticed for four releases (0.9.1–0.9.4) and `develop` was still carrying both the `Repo.configure` binary-host crash and the `winn_pool` exit race. Verify with `git cherry origin/develop origin/main`, and diff the files: `git cherry` reports a commit as missing even when it was ported by a different patch.
+- **Close the issue when the PR merges to `develop`**, not at release time. The CHANGELOG `[Unreleased]` section is the record of what is merged-but-unreleased; an open issue that already has an `[Unreleased]` entry is a missed step, not a pending release.
 
 ## Build & Test Commands
 
