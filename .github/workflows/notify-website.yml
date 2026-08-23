@@ -24,7 +24,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
-          gh api repos/gregwinn/winn-lang-website/dispatches \
-            -X POST \
-            -f event_type=docs-updated
-          echo "Dispatched docs-updated to gregwinn/winn-lang-website"
+          if gh api repos/gregwinn/winn-lang-website/dispatches \
+               -X POST -f event_type=docs-updated 2>/tmp/err; then
+            echo "Dispatched docs-updated to gregwinn/winn-lang-website"
+            exit 0
+          fi
+
+          cat /tmp/err
+          if grep -q "403" /tmp/err; then
+            echo "::error title=REPO_TOKEN cannot dispatch to winn-lang-website::\
+          REPO_TOKEN is currently scoped to gregwinn/apt.winn.ws and \
+          gregwinn/homebrew-winn only. Creating a repository_dispatch needs \
+          'Contents: write' on gregwinn/winn-lang-website. Add that repo to \
+          the token (Settings > Developer settings > Personal access tokens) \
+          and re-run this workflow. Until then winn.ws still updates, but only \
+          via the daily cron backstop in the website repo's sync-docs.yml."
+          fi
+          exit 1
