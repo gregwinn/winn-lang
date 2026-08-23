@@ -1,0 +1,30 @@
+name: Notify website of docs changes
+
+# The public site (winn.ws) is built from docs/*.md on THIS branch (main).
+# The website repo's sync workflow is what actually regenerates and commits
+# the HTML that GitHub Pages serves, so it has to be told when docs change.
+#
+# It previously relied only on a daily cron, which GitHub auto-disables after
+# 60 days of repository inactivity (`disabled_inactivity`). That is exactly
+# what happened — the site sat on v0.9.2 for months. This makes the sync
+# event-driven; the cron stays as a backstop.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+  workflow_dispatch:
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger docs sync on gregwinn/winn-lang-website
+        env:
+          GH_TOKEN: ${{ secrets.REPO_TOKEN }}
+        run: |
+          gh api repos/gregwinn/winn-lang-website/dispatches \
+            -X POST \
+            -f event_type=docs-updated
+          echo "Dispatched docs-updated to gregwinn/winn-lang-website"

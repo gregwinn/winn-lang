@@ -1,0 +1,104 @@
+name: Tag to Release
+
+# When a version tag (vX.Y.Z) is pushed, create a GitHub release with the
+# matching CHANGELOG.md section as the body, then close the matching
+# GitHub milestone. Publishing the release triggers release.yml and
+# homebrew-update.yml.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract CHANGELOG section
+        id: changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Pull the section between ## [VERSION] and the next ## [
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\["ver"\\]" {flag=1; next}
+            flag && /^## \[/ {exit}
+            flag {print}
+          ' CHANGELOG.md > /tmp/notes.md
+
+          # Strip leading blank lines
+          sed -i '/./,$!d' /tmp/notes.md
+
+          if [ ! -s /tmp/notes.md ]; then
+            echo "No CHANGELOG section found for $VERSION — will fall back to auto-generated notes"
+            echo "has_notes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_notes=true" >> "$GITHUB_OUTPUT"
+            echo "--- notes preview ---"
+            cat /tmp/notes.md
+            echo "--- end preview ---"
+          fi
+
+      - name: Check if release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $GITHUB_REF_NAME already exists — skipping creation"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub release (with CHANGELOG notes)
+        if: steps.check.outputs.exists == 'false' && steps.changelog.outputs.has_notes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file /tmp/notes.md
+
+      - name: Create GitHub release (auto-generated notes fallback)
+        if: steps.check.outputs.exists == 'false' && steps.changelog.outputs.has_notes == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
+
+      - name: Close matching milestone
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Find a milestone whose title matches the tag (vX.Y.Z).
+          # Pass the tag to jq via --arg so tag content can't break
+          # the jq filter syntax.
+          MILESTONE_NUMBER=$(gh api \
+            "repos/$GITHUB_REPOSITORY/milestones?state=open" \
+            | jq -r --arg t "$GITHUB_REF_NAME" \
+                '.[] | select(.title == $t) | .number' | head -1)
+
+          if [ -z "$MILESTONE_NUMBER" ]; then
+            echo "No open milestone matching $GITHUB_REF_NAME — skipping"
+          else
+            echo "Closing milestone #$MILESTONE_NUMBER ($GITHUB_REF_NAME)"
+            gh api "repos/$GITHUB_REPOSITORY/milestones/$MILESTONE_NUMBER" \
+              -X PATCH -f state=closed --jq '.state'
+          fi
