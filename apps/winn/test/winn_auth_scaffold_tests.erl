@@ -13,17 +13,22 @@ scaffold_test_() ->
          ]
      end}.
 
+%% `unique_integer` is only unique within one VM, so a later run can reuse this
+%% path. Wipe it first: a leftover migration from an earlier run sits beside
+%% the new one (different timestamp) and `files_exist` sees two.
 setup() ->
     {ok, Cwd} = file:get_cwd(),
     Tmp = filename:join("/tmp",
         "winn_auth_scaffold_" ++ integer_to_list(erlang:unique_integer([positive]))),
+    os:cmd("rm -rf " ++ Tmp),
     ok = filelib:ensure_path(Tmp),
     ok = file:set_cwd(Tmp),
     winn_generator:generate(auth, []),
-    Cwd.
+    {Cwd, Tmp}.
 
-cleanup(Cwd) ->
-    file:set_cwd(Cwd).
+cleanup({Cwd, Tmp}) ->
+    file:set_cwd(Cwd),
+    os:cmd("rm -rf " ++ Tmp).
 
 files_exist() ->
     ?assert(filelib:is_file("src/models/user.winn")),
